@@ -7,12 +7,6 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  experimental: {
-    turbopack: {
-      // Silence the turbopack lockfile warning by explicitly setting the root
-      root: "./",
-    }
-  }
 };
 
 export default nextConfig;

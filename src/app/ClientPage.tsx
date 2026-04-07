@@ -376,7 +376,14 @@ export default function ClientPage() {
     window.open(mailtoLink, "_blank");
   };
 
-  if (!mounted) return null;
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans flex flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        <p className="mt-4 text-zinc-500">Loading ReferMe...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans flex flex-col selection:bg-indigo-200">
