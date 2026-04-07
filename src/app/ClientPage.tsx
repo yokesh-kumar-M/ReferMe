@@ -15,7 +15,7 @@ export default function ClientPage() {
   
   const [jobTitle, setJobTitle] = useState("");
   const [jobDescription, setJobDescription] = useState("");
-  const [generationType, setGenerationType] = useState<"cold_email" | "linkedin" | "cover_letter">("cold_email");
+  const [generationType, setGenerationType] = useState<"cold_email" | "linkedin" | "cover_letter" | "custom_cv">("cold_email");
   
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState("");
@@ -164,6 +164,17 @@ export default function ClientPage() {
     } else if (generationType === "linkedin") {
       systemPrompt = `You are writing a LinkedIn connection request note (strictly under 300 characters total) to a recruiter or hiring manager for the provided job. 
       Use the resume for context but keep it very brief, polite, and action-oriented. State the role you are interested in and a 1-sentence value prop.`;
+    } else if (generationType === "custom_cv") {
+      systemPrompt = `You are an elite executive resume writer. Your task is to rewrite the applicant's provided resume to PERFECTLY match the job description.
+      CRITICAL INSTRUCTIONS:
+      1. DO NOT invent or hallucinate experience. Only reframe, reorder, and highlight existing experience to match the job.
+      2. Use an ATS-friendly, professional format using strict Markdown formatting.
+      3. MUST INCLUDE: 
+         - A powerful, 2-3 sentence tailored Professional Summary at the top.
+         - A Core Competencies/Skills section matching exact keywords from the job description.
+         - Professional Experience with highly tailored bullet points (quantify achievements where possible based on the provided resume).
+         - Education section.
+      4. DO NOT output conversational filler like "Here is your customized CV". Output ONLY the clean Markdown.`;
     } else {
       systemPrompt = `You are writing a highly effective cold email to the hiring manager for the provided job. 
       Use the applicant's resume to highlight only the top 1-2 accomplishments that directly map to the job description's top requirements.
@@ -175,14 +186,14 @@ export default function ClientPage() {
     }
 
     const sanitizedJobDesc = sanitizeText(jobDescription);
-    const relevantResume = extractRelevantResumeContext(store.userResume, sanitizedJobDesc);
+    const relevantResume = generationType === "custom_cv" ? store.userResume : extractRelevantResumeContext(store.userResume, sanitizedJobDesc);
 
     const userPrompt = `
       JOB TITLE: ${sanitizeText(jobTitle)}
       JOB DESCRIPTION:
       ${sanitizedJobDesc}
       
-      APPLICANT RESUME (Relevant Context Only):
+      APPLICANT RESUME ${generationType === "custom_cv" ? '(Full Context)' : '(Relevant Context Only)'}:
       ${relevantResume}
       ${recruiterEmail ? `\n      TARGET RECRUITER EMAIL: ${recruiterEmail}` : ''}
       
@@ -531,8 +542,8 @@ export default function ClientPage() {
 
         {/* Output Generation */}
         <section className="bg-white rounded-2xl p-4 shadow-sm border border-zinc-200/80 flex flex-col gap-4">
-          <div className="grid grid-cols-3 gap-1.5 bg-zinc-100/80 p-1.5 rounded-xl">
-            {(["cold_email", "linkedin", "cover_letter"] as const).map((type) => (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-zinc-100/80 p-1.5 rounded-xl">
+            {(["cold_email", "linkedin", "cover_letter", "custom_cv"] as const).map((type) => (
               <button 
                 key={type}
                 onClick={() => setGenerationType(type)}
@@ -542,7 +553,7 @@ export default function ClientPage() {
                     : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/80"
                 }`}
               >
-                {type === "cold_email" ? "Cold Email" : type === "linkedin" ? "LinkedIn" : "Letter"}
+                {type === "cold_email" ? "Cold Email" : type === "linkedin" ? "LinkedIn" : type === "custom_cv" ? "Custom CV" : "Letter"}
               </button>
             ))}
           </div>
@@ -613,7 +624,7 @@ export default function ClientPage() {
                   </button>
                 </div>
               </div>
-              <div className="whitespace-pre-wrap text-[12px] text-zinc-700 leading-relaxed font-sans selection:bg-blue-200/60">
+              <div className={`whitespace-pre-wrap text-[12px] text-zinc-700 leading-relaxed font-sans selection:bg-blue-200/60 ${generationType === "custom_cv" ? "markdown-styles" : ""}`}>
                 {result}
               </div>
             </motion.div>
@@ -626,6 +637,14 @@ export default function ClientPage() {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+        
+        .markdown-styles h1 { font-size: 1.25rem; font-weight: bold; color: #1e3a8a; margin-top: 1rem; margin-bottom: 0.5rem; }
+        .markdown-styles h2 { font-size: 1.1rem; font-weight: bold; color: #1e40af; margin-top: 1rem; border-bottom: 1px solid #bfdbfe; padding-bottom: 0.25rem; margin-bottom: 0.5rem; }
+        .markdown-styles h3 { font-size: 1rem; font-weight: 600; color: #1e3a8a; margin-top: 0.75rem; margin-bottom: 0.25rem; }
+        .markdown-styles p { margin-bottom: 0.5rem; }
+        .markdown-styles ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+        .markdown-styles li { margin-bottom: 0.25rem; }
+        .markdown-styles strong { font-weight: 700; color: #111827; }
       `}} />
     </div>
   );
