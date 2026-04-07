@@ -51,6 +51,33 @@ function processDirectory(dir) {
       content = content.replace(/href="\/favicon/g, 'href="./favicon');
       content = content.replace(/'\/pdf\.worker\.min\.mjs'/g, "'./pdf.worker.min.mjs'");
       content = content.replace(/"\/pdf\.worker\.min\.mjs"/g, '"./pdf.worker.min.mjs"');
+
+      // EXTRACT INLINE SCRIPTS (Fix for Chrome Extension Manifest V3 CSP)
+      if (fullPath.endsWith('.html')) {
+        const inlineScripts = [];
+        // Match <script>...</script> but ignore those with a src attribute
+        const scriptRegex = /<script(?![^>]*src=)[^>]*>(.*?)<\/script>/gis;
+        
+        content = content.replace(scriptRegex, (match, scriptContent) => {
+          inlineScripts.push(scriptContent);
+          return ''; // Remove the inline script from the HTML
+        });
+
+        if (inlineScripts.length > 0) {
+          const combinedScript = inlineScripts.join('\n;\n');
+          const scriptFileName = `inline-scripts-${path.basename(fullPath, '.html')}.js`;
+          const scriptPath = path.join(dir, scriptFileName);
+          fs.writeFileSync(scriptPath, combinedScript);
+          
+          // Inject the externalized script right before </body>, or at the end if no </body>
+          const scriptTag = `<script src="./${scriptFileName}"></script>`;
+          if (content.includes('</body>')) {
+            content = content.replace('</body>', `${scriptTag}</body>`);
+          } else {
+            content += scriptTag;
+          }
+        }
+      }
       
       fs.writeFileSync(fullPath, content);
     }
