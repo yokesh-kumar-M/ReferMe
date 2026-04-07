@@ -1,14 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAppStore } from "@/store/appStore";
 import { motion, AnimatePresence } from "framer-motion";
-import { sanitizeText, extractRelevantResumeContext } from "@/lib/utils";
+import { sanitizeText, extractRelevantResumeContext, renderMarkdown } from "@/lib/utils";
 import { 
   Briefcase, FileText, Send, Sparkles, Settings,
   CheckCircle2, AlertCircle, Copy, FileUp, X, Mail, Upload, Link,
-  Building, GraduationCap
+  Building, GraduationCap, Zap, ArrowRight
 } from "lucide-react";
+
+type GenerationType = "referral" | "linkedin" | "cover_letter" | "custom_cv" | "cold_mail";
+
+const GENERATION_LABELS: Record<GenerationType, string> = {
+  referral: "Referral Request",
+  linkedin: "LinkedIn Note",
+  cover_letter: "Cover Letter",
+  custom_cv: "Custom CV",
+  cold_mail: "Cold Email",
+};
 
 export default function ClientPage() {
   const store = useAppStore();
@@ -16,7 +26,7 @@ export default function ClientPage() {
   
   const [jobTitle, setJobTitle] = useState("");
   const [jobDescription, setJobDescription] = useState("");
-  const [generationType, setGenerationType] = useState<"referral" | "linkedin" | "cover_letter" | "custom_cv">("referral");
+  const [generationType, setGenerationType] = useState<GenerationType>("referral");
   
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState("");
@@ -27,18 +37,109 @@ export default function ClientPage() {
   const [resumeFileName, setResumeFileName] = useState("");
   const [recruiterUrl, setRecruiterUrl] = useState("");
   const [recruiterEmail, setRecruiterEmail] = useState("");
-  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [isExtension, setIsExtension] = useState(false);
   const [isLpuAlumni, setIsLpuAlumni] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Wait for component to mount before using Zustand persisted state to avoid hydration errors
   useEffect(() => {
     setMounted(true);
     if (typeof chrome !== "undefined" && chrome.tabs) {
       setIsExtension(true);
     }
   }, []);
+
+  const extractLinkedInContext = useCallback(async () => {
+    if (!isExtension) {
+      setError("This feature is only available when running as a Chrome Extension.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url) {
+        throw new Error("No active tab found.");
+      }
+
+      if (tab.url.includes("linkedin.com/jobs")) {
+        const [injectionResult] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id! },
+          func: () => {
+            const titleEl = document.querySelector(".job-details-jobs-unified-top-card__job-title") || document.querySelector("h1");
+            const descEl = document.getElementById("job-details") || document.querySelector(".jobs-description__content");
+            
+            let hmUrl = "";
+            const hmLinks = Array.from(document.querySelectorAll("a[href*='/in/']"));
+            const hirerCard = hmLinks.find(a => a.closest('.hirer-card__hirer-information'));
+            if (hirerCard) {
+              hmUrl = (hirerCard as HTMLAnchorElement).href;
+            }
+
+            return {
+              type: "job" as const,
+              title: titleEl ? (titleEl as HTMLElement).innerText.trim() : "",
+              description: descEl ? (descEl as HTMLElement).innerText.trim() : "",
+              hmUrl: hmUrl.split('?')[0]
+            };
+          }
+        });
+
+        const extracted = injectionResult.result;
+        if (extracted?.title) setJobTitle(extracted.title);
+        if (extracted?.description) setJobDescription(extracted.description);
+        
+        setGenerationType("cover_letter");
+        
+        if (extracted?.hmUrl) {
+           setRecruiterUrl(extracted.hmUrl);
+           setGenerationType("cold_mail");
+        }
+
+      } else if (tab.url.includes("linkedin.com/in/")) {
+        const [injectionResult] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id! },
+          func: () => {
+            const bodyText = document.body.innerText.toLowerCase();
+            const isLpu = bodyText.includes("lovely professional university") || bodyText.includes(" lpu ");
+            
+            const headlineEl = document.querySelector(".text-body-medium");
+            const headline = headlineEl ? (headlineEl as HTMLElement).innerText.toLowerCase() : "";
+            const isHiringManager = headline.includes("recruiter") || 
+                                    headline.includes("talent") || 
+                                    headline.includes("hiring") || 
+                                    headline.includes("hr ") ||
+                                    headline.includes("human resources");
+
+            return {
+              type: "profile" as const,
+              isLpu: isLpu,
+              isHiringManager: isHiringManager
+            };
+          }
+        });
+        
+        setRecruiterUrl(tab.url);
+        
+        if (injectionResult.result?.isHiringManager) {
+          setGenerationType("cold_mail");
+        } else {
+          setGenerationType("referral");
+        }
+
+        if (injectionResult.result?.isLpu) {
+          setIsLpuAlumni(true);
+        }
+      } else {
+        throw new Error("Please navigate to a LinkedIn Job or Profile page first.");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error during scraping.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isExtension]);
 
   // Automatically scrape when in extension mode
   useEffect(() => {
@@ -47,6 +148,7 @@ export default function ClientPage() {
         extractLinkedInContext();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isExtension, mounted]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,12 +175,14 @@ export default function ClientPage() {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(" ");
+        const pageText = textContent.items
+          .map((item) => ('str' in item ? item.str : ''))
+          .join(" ");
         fullText += pageText + "\n";
       }
 
       store.setUserResume(fullText.trim());
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError("Failed to parse PDF. Please ensure it is a valid text-based PDF.");
       console.error(err);
       setResumeFileName("");
@@ -87,128 +191,20 @@ export default function ClientPage() {
     }
   };
 
-  const extractLinkedInContext = async () => {
-    if (!isExtension) {
-      setError("This feature is only available when running as a Chrome Extension.");
-      return;
-    }
-    setError("");
-    setLoading(true);
-
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab || !tab.url) {
-        throw new Error("No active tab found.");
-      }
-
-      if (tab.url.includes("linkedin.com/jobs")) {
-        const [injectionResult] = await chrome.scripting.executeScript({
-          target: { tabId: tab.id! },
-          func: () => {
-            const titleEl = document.querySelector(".job-details-jobs-unified-top-card__job-title") || document.querySelector("h1");
-            const descEl = document.getElementById("job-details") || document.querySelector(".jobs-description__content");
-            
-            // Try to find hiring manager LinkedIn URL
-            let hmUrl = "";
-            const hmLinks = Array.from(document.querySelectorAll("a[href*='/in/']"));
-            const hirerCard = hmLinks.find(a => a.closest('.hirer-card__hirer-information'));
-            if (hirerCard) {
-              hmUrl = (hirerCard as HTMLAnchorElement).href;
-            }
-
-            return {
-              type: "job",
-              title: titleEl ? (titleEl as HTMLElement).innerText.trim() : "",
-              description: descEl ? (descEl as HTMLElement).innerText.trim() : "",
-              hmUrl: hmUrl.split('?')[0] // Clean URL parameters
-            };
-          }
-        });
-
-        const extracted = injectionResult.result;
-        if (extracted?.title) setJobTitle(extracted.title);
-        if (extracted?.description) setJobDescription(extracted.description);
-        
-        // Intelligently Auto-select Cover Letter for Job pages
-        setGenerationType("cover_letter");
-        
-        // Intelligently auto-fill Hiring Manager URL if found
-        if (extracted?.hmUrl) {
-           setRecruiterUrl(extracted.hmUrl);
-           // If we found a hiring manager, we might want to Cold Mail instead!
-           setGenerationType("cold_mail");
-        }
-
-      } else if (tab.url.includes("linkedin.com/in/")) {
-        const [injectionResult] = await chrome.scripting.executeScript({
-          target: { tabId: tab.id! },
-          func: () => {
-            const bodyText = document.body.innerText.toLowerCase();
-            const isLpu = bodyText.includes("lovely professional university") || bodyText.includes(" lpu ");
-            const nameEl = document.querySelector("h1");
-            
-            // Check if user is a recruiter / hiring manager
-            const headlineEl = document.querySelector(".text-body-medium");
-            const headline = headlineEl ? (headlineEl as HTMLElement).innerText.toLowerCase() : "";
-            const isHiringManager = headline.includes("recruiter") || 
-                                    headline.includes("talent") || 
-                                    headline.includes("hiring") || 
-                                    headline.includes("hr ") ||
-                                    headline.includes("human resources");
-
-            return {
-              type: "profile",
-              name: nameEl ? (nameEl as HTMLElement).innerText.trim() : "",
-              isLpu: isLpu,
-              isHiringManager: isHiringManager
-            };
-          }
-        });
-        
-        setRecruiterUrl(tab.url);
-        
-        // Intelligent switching based on profile type
-        if (injectionResult.result?.isHiringManager) {
-          setGenerationType("cold_mail");
-        } else {
-          setGenerationType("referral");
-        }
-
-        if (injectionResult.result?.isLpu) {
-          setIsLpuAlumni(true);
-        }
-      } else {
-        throw new Error("Please navigate to a LinkedIn Job or Profile page first.");
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const verifyRecruiterEmail = async () => {
+  const generateEmailGuess = () => {
     if (!recruiterUrl) {
       setError("Please paste a recruiter's LinkedIn URL.");
       return;
     }
-    setIsVerifyingEmail(true);
-    setError("");
-    setRecruiterEmail("");
     
-    // Simulate triple-verified work email finding
-    setTimeout(() => {
-      const domainMatch = jobTitle.toLowerCase().match(/at\s+([a-z0-9-]+)/i) || 
-                          jobDescription.toLowerCase().match(/([a-z0-9-]+)\.com/i) ||
-                          ["company"];
-      const domain = domainMatch[1] ? domainMatch[1].replace(/[^a-z0-9]/g, '') : "company";
-      
-      const nameMatch = recruiterUrl.match(/in\/([a-z0-9-]+)/i);
-      const name = nameMatch ? nameMatch[1].split('-')[0] : "hiring";
-      
-      setRecruiterEmail(`${name}@${domain}.com`);
-      setIsVerifyingEmail(false);
-    }, 2500);
+    const domainMatch = jobTitle.toLowerCase().match(/at\s+([a-z0-9-]+)/i) || 
+                        jobDescription.toLowerCase().match(/([a-z0-9-]+)\.com/i);
+    const domain = domainMatch?.[1]?.replace(/[^a-z0-9]/g, '') || "company";
+    
+    const nameMatch = recruiterUrl.match(/in\/([a-z0-9-]+)/i);
+    const name = nameMatch ? nameMatch[1].split('-')[0] : "hiring";
+    
+    setRecruiterEmail(`${name}@${domain}.com`);
   };
 
   const generateContent = async () => {
@@ -217,8 +213,12 @@ export default function ClientPage() {
       setShowSettings(true);
       return;
     }
-    if (!store.userResume || !jobDescription) {
-      setError("Please provide your resume and the job description.");
+    if (!store.userResume) {
+      setError("Please upload your resume first.");
+      return;
+    }
+    if (!jobDescription) {
+      setError("Please paste the job description.");
       return;
     }
 
@@ -226,39 +226,48 @@ export default function ClientPage() {
     setError("");
     setResult("");
 
-    let systemPrompt = "";
-    const lpuContext = isLpuAlumni ? `\nCRITICAL: The applicant and the recipient BOTH attended Lovely Professional University (LPU). You MUST prominently leverage this shared alumni connection. Start the message by warmly calling out this shared LPU college connection to build instant rapport before asking for the referral or connection.` : "";
+    const lpuContext = isLpuAlumni 
+      ? `\nCRITICAL: The applicant and the recipient BOTH attended Lovely Professional University (LPU). You MUST prominently leverage this shared alumni connection. Start the message by warmly calling out this shared LPU college connection to build instant rapport.` 
+      : "";
 
-    if (generationType === "cover_letter") {
-      systemPrompt = `You are an expert career coach writing a highly compelling, professional cover letter. 
-      Match the applicant's resume skills strictly to the job description perfectly. 
-      Keep it to 3 concise, engaging paragraphs. Show confidence but be authentic. Do not make up experience.${lpuContext}`;
-    } else if (generationType === "linkedin") {
-      systemPrompt = `You are writing a LinkedIn connection request note (strictly under 300 characters total) to a recruiter or hiring manager for the provided job. 
-      Use the resume for context but keep it very brief, polite, and action-oriented. Ask for a referral or a brief chat.${lpuContext}`;
-    } else if (generationType === "custom_cv") {
-      systemPrompt = `You are an elite executive resume writer. Your task is to rewrite the applicant's provided resume to PERFECTLY match the job description.
-      CRITICAL INSTRUCTIONS:
-      1. DO NOT invent or hallucinate experience. Only reframe, reorder, and highlight existing experience to match the job.
-      2. Use an ATS-friendly, professional format using strict Markdown formatting.
-      3. MUST INCLUDE: 
-         - A powerful, 2-3 sentence tailored Professional Summary at the top.
-         - A Core Competencies/Skills section matching exact keywords from the job description.
-         - Professional Experience with highly tailored bullet points (quantify achievements where possible based on the provided resume).
-         - Education section.
-      4. DO NOT output conversational filler like "Here is your customized CV". Output ONLY the clean Markdown.`;
-    } else {
-      systemPrompt = `You are writing a highly effective referral request email to a hiring manager or employee at the target company.
-      Use the applicant's resume to highlight only the top 1-2 accomplishments that directly map to the job description's top requirements to impress them with your competence.
-      Keep it under 150 words total. Include a strong subject line formatted exactly as:
-      Subject: [Your Subject Here]
+    const systemPrompts: Record<GenerationType, string> = {
+      cover_letter: `You are an expert career coach writing a highly compelling, professional cover letter. Match the applicant's resume skills strictly to the job description. Keep it to 3 concise, engaging paragraphs. Show confidence but be authentic. Do not make up experience.${lpuContext}`,
       
-      Start with a direct hook, provide the value proposition, and end with a low-friction call to action (e.g., asking for a referral or a brief chat).
-      Do not be overly formal or use cliché buzzwords. Write like a confident, competent professional.${lpuContext}`;
-    }
+      linkedin: `You are writing a LinkedIn connection request note (strictly under 300 characters total) to a recruiter or hiring manager for the provided job. Use the resume for context but keep it very brief, polite, and action-oriented. Ask for a referral or a brief chat.${lpuContext}`,
+      
+      custom_cv: `You are an elite executive resume writer. Rewrite the applicant's resume to PERFECTLY match the job description.
+CRITICAL INSTRUCTIONS:
+1. DO NOT invent or hallucinate experience. Only reframe, reorder, and highlight existing experience.
+2. Use an ATS-friendly, professional format using strict Markdown formatting.
+3. MUST INCLUDE:
+   - A powerful, 2-3 sentence tailored Professional Summary at the top.
+   - A Core Competencies/Skills section matching exact keywords from the job description.
+   - Professional Experience with highly tailored bullet points (quantify achievements where possible).
+   - Education section.
+4. Output ONLY the clean Markdown. No conversational filler.`,
+      
+      cold_mail: `You are writing a highly effective cold outreach email to a hiring manager or recruiter at the target company.
+Use the applicant's resume to highlight only the top 1-2 accomplishments that directly map to the job description's top requirements.
+Keep it under 150 words total. Include a strong subject line formatted exactly as:
+Subject: [Your Subject Here]
 
+Be direct, showcase value, and end with a specific low-friction call to action (e.g., "Would a 10-minute chat this week work?").
+Do not be overly formal or use cliché buzzwords. Write like a confident, competent professional.${lpuContext}`,
+      
+      referral: `You are writing a highly effective referral request email to an employee at the target company.
+Use the applicant's resume to highlight only the top 1-2 accomplishments that directly map to the job description's top requirements.
+Keep it under 150 words total. Include a strong subject line formatted exactly as:
+Subject: [Your Subject Here]
+
+Start with a direct hook, provide the value proposition, and end with a low-friction call to action (e.g., asking for a referral or a brief chat).
+Do not be overly formal or use cliché buzzwords. Write like a confident, competent professional.${lpuContext}`,
+    };
+
+    const systemPrompt = systemPrompts[generationType];
     const sanitizedJobDesc = sanitizeText(jobDescription);
-    const relevantResume = generationType === "custom_cv" ? store.userResume : extractRelevantResumeContext(store.userResume, sanitizedJobDesc);
+    const relevantResume = generationType === "custom_cv" 
+      ? store.userResume 
+      : extractRelevantResumeContext(store.userResume, sanitizedJobDesc);
 
     const userPrompt = `
       JOB TITLE: ${sanitizeText(jobTitle)}
@@ -278,17 +287,19 @@ export default function ClientPage() {
       } else {
         throw new Error("No Groq API key available.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn("Groq failed, attempting Gemini fallback:", err);
       if (store.geminiApiKey) {
         try {
           await tryGenerateWithGemini(systemPrompt, userPrompt);
-        } catch (geminiErr: any) {
-          setError(`Both models failed. Gemini Error: ${geminiErr.message}`);
+        } catch (geminiErr: unknown) {
+          const message = geminiErr instanceof Error ? geminiErr.message : "Unknown error";
+          setError(`Both models failed. Gemini Error: ${message}`);
           setLoading(false);
         }
       } else {
-        setError(err.message || "Failed to generate content.");
+        const message = err instanceof Error ? err.message : "Failed to generate content.";
+        setError(message);
         setLoading(false);
       }
     }
@@ -314,34 +325,34 @@ export default function ClientPage() {
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error?.message || "Groq API error");
+      throw new Error(errData.error?.message || `Groq API error (${response.status})`);
     }
 
     const reader = response.body?.getReader();
     if (!reader) throw new Error("Stream reader not available");
     
     const decoder = new TextDecoder();
-    let isDone = false;
     let currentText = "";
     
     setLoading(false);
 
-    while (!isDone) {
+    while (true) {
       const { value, done } = await reader.read();
-      isDone = done;
-      if (value) {
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-            try {
-              const data = JSON.parse(line.slice(6));
-              const content = data.choices?.[0]?.delta?.content;
-              if (content) {
-                currentText += content;
-                setResult(currentText);
-              }
-            } catch (e) {}
+      if (done) break;
+      
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+          try {
+            const data = JSON.parse(line.slice(6));
+            const content = data.choices?.[0]?.delta?.content;
+            if (content) {
+              currentText += content;
+              setResult(currentText);
+            }
+          } catch {
+            // Skip malformed JSON chunks during streaming
           }
         }
       }
@@ -349,49 +360,60 @@ export default function ClientPage() {
   };
 
   const tryGenerateWithGemini = async (systemPrompt: string, userPrompt: string) => {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${store.geminiApiKey}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [{
-          role: "user",
-          parts: [{ text: `SYSTEM INSTRUCTIONS:\n${systemPrompt}\n\nUSER PROMPT:\n${userPrompt}` }]
-        }],
-        generationConfig: {
-          temperature: 0.6
-        }
-      })
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=${store.geminiApiKey}`, 
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: systemPrompt }]
+          },
+          contents: [{
+            role: "user",
+            parts: [{ text: userPrompt }]
+          }],
+          generationConfig: { temperature: 0.6 }
+        })
+      }
+    );
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error?.message || "Gemini API error");
+      throw new Error(errData.error?.message || `Gemini API error (${response.status})`);
     }
 
     const reader = response.body?.getReader();
     if (!reader) throw new Error("Stream reader not available");
     
     const decoder = new TextDecoder();
-    let isDone = false;
     let currentText = "";
+    let buffer = "";
     
     setLoading(false);
 
-    while (!isDone) {
+    while (true) {
       const { value, done } = await reader.read();
-      isDone = done;
-      if (value) {
-        const chunk = decoder.decode(value, { stream: true });
-        const matches = [...chunk.matchAll(/"text"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g)];
-        for (const match of matches) {
-          try {
-            const piece = JSON.parse(`"${match[1]}"`);
-            currentText += piece;
-            setResult(currentText);
-          } catch (e) {}
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      
+      // Try to extract text chunks from the streamed JSON array
+      const matches = [...buffer.matchAll(/"text"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g)];
+      for (const match of matches) {
+        try {
+          const piece = JSON.parse(`"${match[1]}"`);
+          currentText += piece;
+          setResult(currentText);
+        } catch {
+          // Skip malformed chunks
         }
+      }
+      // Keep only the tail after last match to avoid re-processing
+      if (matches.length > 0) {
+        const lastMatch = matches[matches.length - 1];
+        const lastIndex = buffer.lastIndexOf(lastMatch[0]) + lastMatch[0].length;
+        buffer = buffer.slice(lastIndex);
       }
     }
   };
@@ -415,6 +437,14 @@ export default function ClientPage() {
     const mailtoLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${recruiterEmail ? encodeURIComponent(recruiterEmail) : ''}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.open(mailtoLink, "_blank");
   };
+
+  // --- Computed state for step indicator ---
+  const completedSteps = [
+    !!store.userResume,
+    !!jobDescription,
+    !!result,
+  ];
+  const stepLabels = ["Upload Resume", "Add Job Details", "Generate"];
 
   if (!mounted) {
     return (
@@ -446,6 +476,31 @@ export default function ClientPage() {
           <span className="text-sm font-bold hidden sm:inline">Settings</span>
         </button>
       </header>
+
+      {/* Step Progress Indicator */}
+      <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6">
+        <div className="flex items-center gap-2 sm:gap-4">
+          {stepLabels.map((label, idx) => (
+            <React.Fragment key={label}>
+              <div className="flex items-center gap-2">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300
+                  ${completedSteps[idx] 
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200' 
+                    : 'bg-zinc-200 text-zinc-500'}`}
+                >
+                  {completedSteps[idx] ? <CheckCircle2 size={14} strokeWidth={3} /> : idx + 1}
+                </div>
+                <span className={`text-xs font-semibold hidden sm:inline ${completedSteps[idx] ? 'text-emerald-700' : 'text-zinc-500'}`}>
+                  {label}
+                </span>
+              </div>
+              {idx < stepLabels.length - 1 && (
+                <div className={`flex-1 h-0.5 rounded transition-colors duration-300 ${completedSteps[idx] ? 'bg-emerald-300' : 'bg-zinc-200'}`} />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
 
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8">
@@ -480,9 +535,10 @@ export default function ClientPage() {
             >
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-indigo-100 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500" />
-                <h3 className="text-base font-bold text-zinc-800 mb-4 flex items-center gap-2">
+                <h3 className="text-base font-bold text-zinc-800 mb-1 flex items-center gap-2">
                   <Settings size={18} className="text-indigo-500" /> API Configuration
                 </h3>
+                <p className="text-xs text-zinc-500 mb-4">Your API keys are stored locally in your browser and never sent to our servers.</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-xs uppercase tracking-wider font-bold text-zinc-500 mb-2">Groq API Key (Primary, Fast)</label>
@@ -543,7 +599,7 @@ export default function ClientPage() {
                     </div>
                   </div>
                   <button 
-                    onClick={() => store.setUserResume("")}
+                    onClick={() => { store.setUserResume(""); setResumeFileName(""); }}
                     className="text-zinc-400 hover:text-red-500 hover:bg-red-50 p-2.5 rounded-xl transition-colors"
                     title="Remove resume"
                   >
@@ -593,14 +649,14 @@ export default function ClientPage() {
                   value={recruiterUrl}
                   onChange={(e) => setRecruiterUrl(e.target.value)}
                   placeholder="Paste Recruiter's LinkedIn URL..."
-                  className="flex-1 px-3 py-2 text-sm bg-transparent outline-none placeholder:text-zinc-400 font-medium"
+                  className="flex-1 px-3 py-2 text-sm bg-transparent outline-none placeholder:text-zinc-400 font-medium min-w-0"
                 />
                 <button
-                  onClick={verifyRecruiterEmail}
-                  disabled={isVerifyingEmail || !recruiterUrl}
-                  className="bg-zinc-900 hover:bg-black text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-sm"
+                  onClick={generateEmailGuess}
+                  disabled={!recruiterUrl}
+                  className="bg-zinc-900 hover:bg-black text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-sm shrink-0"
                 >
-                  {isVerifyingEmail ? "Scanning..." : "Find Email"}
+                  Guess Email
                 </button>
               </div>
               
@@ -609,14 +665,14 @@ export default function ClientPage() {
                   <motion.div
                     initial={{ opacity: 0, height: 0, marginTop: 0 }}
                     animate={{ opacity: 1, height: 'auto', marginTop: 16 }}
-                    className="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-4 rounded-xl"
+                    className="flex items-center justify-between bg-amber-50 border border-amber-200 p-4 rounded-xl"
                   >
                     <div className="flex flex-col">
-                      <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Found Work Email</span>
+                      <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider mb-1">Estimated Email (Not Verified)</span>
                       <span className="text-sm font-bold text-zinc-900 select-all">{recruiterEmail}</span>
                     </div>
                     <div className="bg-white p-1.5 rounded-full shadow-sm">
-                      <CheckCircle2 size={18} className="text-emerald-500" />
+                      <Zap size={18} className="text-amber-500" />
                     </div>
                   </motion.div>
                 )}
@@ -648,6 +704,7 @@ export default function ClientPage() {
                 <h2 className="text-sm font-bold text-zinc-800 flex items-center gap-2">
                   <Briefcase size={18} className="text-indigo-500" /> Job Details
                 </h2>
+                {jobDescription && <CheckCircle2 size={16} className="text-emerald-500" />}
               </div>
               
               <div className="flex-1 flex flex-col bg-zinc-50 border border-zinc-200/80 rounded-xl overflow-hidden focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-400/10 transition-all duration-300">
@@ -677,8 +734,8 @@ export default function ClientPage() {
                 <Sparkles size={18} className="text-indigo-500" /> Generation Engine
               </h2>
               
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-zinc-100/80 p-1.5 rounded-xl mb-5">
-                {(["referral", "linkedin", "cover_letter", "custom_cv"] as const).map((type) => (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-zinc-100/80 p-1.5 rounded-xl mb-5">
+                {(Object.keys(GENERATION_LABELS) as GenerationType[]).map((type) => (
                   <button 
                     key={type}
                     onClick={() => setGenerationType(type)}
@@ -688,7 +745,7 @@ export default function ClientPage() {
                         : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/80"
                     }`}
                   >
-                    {type === "referral" ? "Referral Request" : type === "linkedin" ? "LinkedIn" : type === "custom_cv" ? "Custom CV" : "Cover Letter"}
+                    {GENERATION_LABELS[type]}
                   </button>
                 ))}
               </div>
@@ -705,7 +762,7 @@ export default function ClientPage() {
                 ) : (
                   <Send size={18} className="text-white/90" />
                 )}
-                {loading ? "Crafting your masterpiece..." : "Generate Outreach"}
+                {loading ? "Crafting your masterpiece..." : `Generate ${GENERATION_LABELS[generationType]}`}
               </button>
             </section>
 
@@ -725,7 +782,7 @@ export default function ClientPage() {
                       <FileText size={16} className="text-indigo-600" /> Final Output
                     </h2>
                     <div className="flex items-center gap-2">
-                      {generationType === "referral" && (
+                      {(generationType === "referral" || generationType === "cold_mail" || generationType === "cover_letter") && (
                         <button 
                           onClick={openInEmail}
                           className="text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 font-bold shadow-sm bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300"
@@ -742,15 +799,22 @@ export default function ClientPage() {
                         }`}
                       >
                         {copied ? <CheckCircle2 size={14} strokeWidth={3} /> : <Copy size={14} strokeWidth={2.5} />}
-                        {copied ? "Copied to Clipboard" : "Copy Text"}
+                        {copied ? "Copied!" : "Copy"}
                       </button>
                     </div>
                   </div>
                   
                   <div className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-white">
-                    <div className={`whitespace-pre-wrap text-sm text-zinc-700 leading-relaxed font-sans max-w-none ${generationType === "custom_cv" ? "markdown-styles" : ""}`}>
-                      {result}
-                    </div>
+                    {generationType === "custom_cv" ? (
+                      <div 
+                        className="markdown-output text-sm leading-relaxed max-w-none"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(result) }} 
+                      />
+                    ) : (
+                      <div className="whitespace-pre-wrap text-sm text-zinc-700 leading-relaxed font-sans max-w-none">
+                        {result}
+                      </div>
+                    )}
                   </div>
                 </motion.section>
               ) : (
@@ -767,6 +831,13 @@ export default function ClientPage() {
                   <p className="text-sm text-zinc-500 max-w-xs leading-relaxed">
                     Upload your resume, paste a job description, and hit generate to craft your tailored outreach.
                   </p>
+                  <div className="flex items-center gap-2 mt-5 text-xs text-zinc-400 font-medium">
+                    <span className="flex items-center gap-1"><FileUp size={14} /> Resume</span>
+                    <ArrowRight size={12} />
+                    <span className="flex items-center gap-1"><Briefcase size={14} /> Job</span>
+                    <ArrowRight size={12} />
+                    <span className="flex items-center gap-1"><Sparkles size={14} /> AI</span>
+                  </div>
                 </motion.section>
               )}
             </AnimatePresence>
@@ -775,21 +846,10 @@ export default function ClientPage() {
         </div>
       </main>
 
-      <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
-        
-        .markdown-styles h1 { font-size: 1.5rem; font-weight: 800; color: #1e1b4b; margin-top: 1.5rem; margin-bottom: 0.75rem; letter-spacing: -0.025em; }
-        .markdown-styles h2 { font-size: 1.25rem; font-weight: 700; color: #312e81; margin-top: 1.5rem; border-bottom: 2px solid #e0e7ff; padding-bottom: 0.5rem; margin-bottom: 0.75rem; letter-spacing: -0.015em; }
-        .markdown-styles h3 { font-size: 1.1rem; font-weight: 600; color: #3730a3; margin-top: 1rem; margin-bottom: 0.25rem; }
-        .markdown-styles p { margin-bottom: 0.75rem; color: #3f3f46; line-height: 1.6; }
-        .markdown-styles ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; color: #3f3f46; }
-        .markdown-styles li { margin-bottom: 0.375rem; line-height: 1.5; }
-        .markdown-styles li::marker { color: #818cf8; }
-        .markdown-styles strong { font-weight: 700; color: #18181b; }
-      `}} />
+      {/* Footer */}
+      <footer className="text-center py-4 text-xs text-zinc-400 border-t border-zinc-100 bg-white/50">
+        <p>ReferMe — 100% Free & Open Source AI Job Outreach. Your data stays in your browser.</p>
+      </footer>
     </div>
   );
 }

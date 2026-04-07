@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  --background: #fafafa;
   --foreground: #171717;
 }
 
@@ -12,17 +12,83 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   min-width: 450px;
   min-height: 600px;
+}
+
+/* Custom scrollbar */
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+
+/* Markdown rendering for Custom CV output */
+.markdown-output h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #1e1b4b;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.025em;
+}
+.markdown-output h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #312e81;
+  margin-top: 1.5rem;
+  border-bottom: 2px solid #e0e7ff;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.015em;
+}
+.markdown-output h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #3730a3;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+}
+.markdown-output p {
+  margin-bottom: 0.75rem;
+  color: #3f3f46;
+  line-height: 1.6;
+}
+.markdown-output ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+  color: #3f3f46;
+}
+.markdown-output ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+  color: #3f3f46;
+}
+.markdown-output li {
+  margin-bottom: 0.375rem;
+  line-height: 1.5;
+}
+.markdown-output li::marker {
+  color: #818cf8;
+}
+.markdown-output strong {
+  font-weight: 700;
+  color: #18181b;
+}
+.markdown-output hr {
+  border: none;
+  border-top: 1px solid #e4e4e7;
+  margin: 1.5rem 0;
+}
+.markdown-output code {
+  background: #f4f4f5;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  font-family: var(--font-geist-mono), monospace;
 }

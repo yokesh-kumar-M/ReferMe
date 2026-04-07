@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { encryptKey, decryptKey } from '@/lib/utils';
+import { obfuscateKey, deobfuscateKey } from '@/lib/utils';
+import { DEFAULT_RESUME } from '@/lib/yokesh_resume';
 
 interface AppState {
   groqApiKey: string;
@@ -14,11 +15,13 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
+      // Note: The API key has been removed from the git history for security reasons as GitHub blocked the push.
+      // Please paste your key in the settings UI.
       groqApiKey: '',
       geminiApiKey: '',
       setGroqApiKey: (key) => set({ groqApiKey: key }),
       setGeminiApiKey: (key) => set({ geminiApiKey: key }),
-      userResume: '',
+      userResume: DEFAULT_RESUME,
       setUserResume: (resume) => set({ userResume: resume }),
     }),
     {
@@ -27,14 +30,14 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         ...state,
         // Encrypt API keys before storing them
-        groqApiKey: encryptKey(state.groqApiKey),
-        geminiApiKey: encryptKey(state.geminiApiKey),
+        groqApiKey: obfuscateKey(state.groqApiKey),
+        geminiApiKey: obfuscateKey(state.geminiApiKey),
       }),
       onRehydrateStorage: () => (state) => {
         // Decrypt API keys after loading them from storage
         if (state) {
-          state.groqApiKey = decryptKey(state.groqApiKey);
-          state.geminiApiKey = decryptKey(state.geminiApiKey);
+          state.groqApiKey = deobfuscateKey(state.groqApiKey);
+          state.geminiApiKey = deobfuscateKey(state.geminiApiKey);
         }
       },
     }
