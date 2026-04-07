@@ -18,17 +18,17 @@ if (fs.existsSync(nextDir)) {
   console.log("Renamed _next directory to assets.");
 }
 
-// Remove any file or directory starting with _not-found as Chrome extensions don't allow files starting with "_"
+// Remove any file or directory starting with "_" because Chrome extensions do not allow files starting with "_"
 const outFiles = fs.readdirSync(outDir);
 for (const file of outFiles) {
-  if (file.startsWith('_not-found')) {
+  if (file.startsWith('_') && file !== 'assets') {
     const fullPath = path.join(outDir, file);
     if (fs.statSync(fullPath).isDirectory()) {
       fs.rmSync(fullPath, { recursive: true, force: true });
     } else {
       fs.unlinkSync(fullPath);
     }
-    console.log(`Removed ${file}`);
+    console.log(`Removed reserved system file: ${file}`);
   }
 }
 
