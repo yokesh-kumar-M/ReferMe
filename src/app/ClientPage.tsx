@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAppStore } from "@/store/appStore";
 import { motion, AnimatePresence } from "framer-motion";
+import { sanitizeText, extractRelevantResumeContext } from "@/lib/utils";
 import { 
   Briefcase, FileText, Send, Sparkles, Settings,
   CheckCircle2, AlertCircle, Copy, FileUp, X, Mail, Upload, Link
@@ -141,8 +142,8 @@ export default function ClientPage() {
   };
 
   const generateContent = async () => {
-    if (!store.groqApiKey) {
-      setError("Please add your Groq API Key in the settings.");
+    if (!store.groqApiKey && !store.geminiApiKey) {
+      setError("Please add an API Key (Groq or Gemini) in the settings.");
       setShowSettings(true);
       return;
     }
@@ -173,46 +174,145 @@ export default function ClientPage() {
       Do not be overly formal or use cliché buzzwords. Write like a confident, competent professional.`;
     }
 
+    const sanitizedJobDesc = sanitizeText(jobDescription);
+    const relevantResume = extractRelevantResumeContext(store.userResume, sanitizedJobDesc);
+
     const userPrompt = `
-      JOB TITLE: ${jobTitle}
+      JOB TITLE: ${sanitizeText(jobTitle)}
       JOB DESCRIPTION:
-      ${jobDescription}
+      ${sanitizedJobDesc}
       
-      APPLICANT RESUME:
-      ${store.userResume}
+      APPLICANT RESUME (Relevant Context Only):
+      ${relevantResume}
       ${recruiterEmail ? `\n      TARGET RECRUITER EMAIL: ${recruiterEmail}` : ''}
       
       Please generate the requested content. DO NOT include any placeholder text like [Your Name] if the name is available in the resume. Return ONLY the final output ready to be copy-pasted.
     `;
 
     try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${store.groqApiKey}`
-        },
-        body: JSON.stringify({
-          model: "llama3-70b-8192",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-          ],
-          temperature: 0.6,
-        })
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error?.message || "Failed to generate content.");
+      if (store.groqApiKey) {
+        await tryGenerateWithGroq(systemPrompt, userPrompt);
+      } else {
+        throw new Error("No Groq API key available.");
       }
-
-      const data = await response.json();
-      setResult(data.choices[0].message.content.trim());
     } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      console.warn("Groq failed, attempting Gemini fallback:", err);
+      if (store.geminiApiKey) {
+        try {
+          await tryGenerateWithGemini(systemPrompt, userPrompt);
+        } catch (geminiErr: any) {
+          setError(`Both models failed. Gemini Error: ${geminiErr.message}`);
+          setLoading(false);
+        }
+      } else {
+        setError(err.message || "Failed to generate content.");
+        setLoading(false);
+      }
+    }
+  };
+
+  const tryGenerateWithGroq = async (systemPrompt: string, userPrompt: string) => {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${store.groqApiKey}`
+      },
+      body: JSON.stringify({
+        model: "llama3-70b-8192",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 0.6,
+        stream: true,
+      })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error?.message || "Groq API error");
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Stream reader not available");
+    
+    const decoder = new TextDecoder();
+    let isDone = false;
+    let currentText = "";
+    
+    setLoading(false);
+
+    while (!isDone) {
+      const { value, done } = await reader.read();
+      isDone = done;
+      if (value) {
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+            try {
+              const data = JSON.parse(line.slice(6));
+              const content = data.choices?.[0]?.delta?.content;
+              if (content) {
+                currentText += content;
+                setResult(currentText);
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    }
+  };
+
+  const tryGenerateWithGemini = async (systemPrompt: string, userPrompt: string) => {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${store.geminiApiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [{ text: `SYSTEM INSTRUCTIONS:\n${systemPrompt}\n\nUSER PROMPT:\n${userPrompt}` }]
+        }],
+        generationConfig: {
+          temperature: 0.6
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error?.message || "Gemini API error");
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Stream reader not available");
+    
+    const decoder = new TextDecoder();
+    let isDone = false;
+    let currentText = "";
+    
+    setLoading(false);
+
+    while (!isDone) {
+      const { value, done } = await reader.read();
+      isDone = done;
+      if (value) {
+        const chunk = decoder.decode(value, { stream: true });
+        // Extremely simple parsing for Gemini's SSE format which looks like:
+        // "text": "..."
+        // This regex safely extracts the text pieces without doing complex JSON streaming parses
+        const matches = [...chunk.matchAll(/"text"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g)];
+        for (const match of matches) {
+          try {
+            const piece = JSON.parse(`"${match[1]}"`);
+            currentText += piece;
+            setResult(currentText);
+          } catch (e) {}
+        }
+      }
     }
   };
 
@@ -284,6 +384,18 @@ export default function ClientPage() {
                 />
                 <p className="text-[10px] text-zinc-500 mt-2 font-medium">
                   Free API key at <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700 hover:underline">console.groq.com</a>
+                </p>
+                
+                <label className="block text-[11px] uppercase tracking-wider font-bold text-zinc-500 mb-1.5 mt-3">Gemini API Key (Fallback)</label>
+                <input 
+                  type="password"
+                  value={store.geminiApiKey}
+                  onChange={(e) => store.setGeminiApiKey(e.target.value)}
+                  placeholder="AIza..."
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-zinc-400"
+                />
+                <p className="text-[10px] text-zinc-500 mt-2 font-medium">
+                  Free 15 RPM at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700 hover:underline">aistudio.google.com</a>
                 </p>
               </div>
             </motion.div>
