@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { sanitizeText, extractRelevantResumeContext } from "@/lib/utils";
 import { 
   Briefcase, FileText, Send, Sparkles, Settings,
-  CheckCircle2, AlertCircle, Copy, FileUp, X, Mail, Upload, Link
+  CheckCircle2, AlertCircle, Copy, FileUp, X, Mail, Upload, Link,
+  ChevronRight, Building
 } from "lucide-react";
 
 export default function ClientPage() {
@@ -261,7 +262,7 @@ export default function ClientPage() {
       isDone = done;
       if (value) {
         const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\\n');
+        const lines = chunk.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ') && line !== 'data: [DONE]') {
             try {
@@ -314,9 +315,6 @@ export default function ClientPage() {
       isDone = done;
       if (value) {
         const chunk = decoder.decode(value, { stream: true });
-        // Extremely simple parsing for Gemini's SSE format which looks like:
-        // "text": "..."
-        // This regex safely extracts the text pieces without doing complex JSON streaming parses
         const matches = [...chunk.matchAll(/"text"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g)];
         for (const match of matches) {
           try {
@@ -339,7 +337,6 @@ export default function ClientPage() {
     let subject = jobTitle ? `Application for ${jobTitle}` : "Job Application Inquiry";
     let body = result;
 
-    // Try to extract subject line if AI generated it
     const subjectMatch = result.match(/^Subject:\s*(.+)$/m);
     if (subjectMatch) {
       subject = subjectMatch[1].trim();
@@ -350,303 +347,356 @@ export default function ClientPage() {
     window.open(mailtoLink, "_blank");
   };
 
-  if (!mounted) return null; // Wait for hydration
+  if (!mounted) return null;
 
   return (
-    <div className="w-full h-full sm:w-[400px] sm:h-[650px] sm:max-h-[90vh] overflow-y-auto bg-zinc-50 sm:bg-white text-zinc-900 font-sans flex flex-col relative custom-scrollbar sm:rounded-[24px] sm:shadow-2xl sm:border border-zinc-200/80">
+    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans flex flex-col selection:bg-indigo-200">
       {/* Header */}
-      <header className="flex items-center justify-between px-5 py-4 bg-white/80 backdrop-blur-xl border-b border-zinc-200/80 sticky top-0 z-50 sm:rounded-t-[24px]">
+      <header className="flex items-center justify-between px-6 lg:px-12 py-4 bg-white/80 backdrop-blur-xl border-b border-zinc-200/80 sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="bg-gradient-to-tr from-blue-600 to-blue-500 p-1.5 rounded-lg text-white shadow-md shadow-blue-500/20 flex items-center justify-center">
-            <Sparkles size={18} strokeWidth={2.5} />
+          <div className="bg-gradient-to-tr from-indigo-600 to-violet-500 p-2 rounded-xl text-white shadow-md shadow-indigo-500/20 flex items-center justify-center">
+            <Sparkles size={22} strokeWidth={2.5} />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-[15px] font-bold tracking-tight text-zinc-900 leading-none">ReferMe</h1>
-            <p className="text-[10px] text-zinc-500 font-medium leading-none mt-0.5">100% Free AI Outreach</p>
+            <h1 className="text-xl font-black tracking-tight text-zinc-900 leading-none">ReferMe</h1>
+            <p className="text-xs text-zinc-500 font-medium leading-none mt-1">AI-Powered Career Toolkit</p>
           </div>
         </div>
         <button 
           onClick={() => setShowSettings(!showSettings)}
-          className={`p-2 rounded-lg transition-all duration-200 ${showSettings ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700'}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${showSettings ? 'bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-200' : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 shadow-sm'}`}
         >
           <Settings size={18} />
+          <span className="text-sm font-bold hidden sm:inline">Settings</span>
         </button>
       </header>
 
       {/* Main Content Area */}
-      <div className="p-5 space-y-6 flex-1">
+      <main className="flex-1 w-full max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8">
         
-        <AnimatePresence>
-          {showSettings && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0, scale: 0.95 }}
-              animate={{ height: 'auto', opacity: 1, scale: 1 }}
-              exit={{ height: 0, opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <div className="bg-white rounded-xl p-4 shadow-sm border border-blue-100 mb-2 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
-                <label className="block text-[11px] uppercase tracking-wider font-bold text-zinc-500 mb-1.5">Groq API Key</label>
-                <input 
-                  type="password"
-                  value={store.groqApiKey}
-                  onChange={(e) => store.setGroqApiKey(e.target.value)}
-                  placeholder="gsk_..."
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-zinc-400"
-                />
-                <p className="text-[10px] text-zinc-500 mt-2 font-medium">
-                  Free API key at <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700 hover:underline">console.groq.com</a>
-                </p>
-                
-                <label className="block text-[11px] uppercase tracking-wider font-bold text-zinc-500 mb-1.5 mt-3">Gemini API Key (Fallback)</label>
-                <input 
-                  type="password"
-                  value={store.geminiApiKey}
-                  onChange={(e) => store.setGeminiApiKey(e.target.value)}
-                  placeholder="AIza..."
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-zinc-400"
-                />
-                <p className="text-[10px] text-zinc-500 mt-2 font-medium">
-                  Free 15 RPM at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700 hover:underline">aistudio.google.com</a>
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Resume Section */}
-        <section className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <h2 className="text-[14px] font-bold text-zinc-800 flex items-center gap-1.5">
-              <FileText size={16} className="text-blue-500" /> My Resume
-            </h2>
-            {store.userResume && <CheckCircle2 size={16} className="text-emerald-500 drop-shadow-sm" />}
-          </div>
-          
-          {store.userResume ? (
-            <div className="flex items-center justify-between bg-white border border-zinc-200/80 shadow-sm rounded-xl p-3.5 group hover:border-blue-300 transition-all duration-200 hover:shadow-md">
-              <div className="flex items-center gap-3 overflow-hidden">
-                <div className="bg-blue-50 p-2 rounded-lg text-blue-600 shrink-0">
-                  <FileUp size={16} strokeWidth={2.5} />
-                </div>
-                <div className="flex flex-col truncate">
-                  <span className="text-[13px] text-zinc-800 font-semibold truncate">{resumeFileName || "resume_parsed.pdf"}</span>
-                  <span className="text-[11px] text-emerald-600 font-medium">Ready for generation</span>
-                </div>
-              </div>
-              <button 
-                onClick={() => store.setUserResume("")}
-                className="text-zinc-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
-                title="Remove resume"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          ) : (
-            <div 
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-zinc-200 hover:border-blue-400 bg-white hover:bg-blue-50/50 rounded-2xl p-6 text-center cursor-pointer transition-all duration-300 group shadow-sm hover:shadow-md"
-            >
-              <input 
-                type="file" 
-                accept="application/pdf" 
-                className="hidden" 
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-              />
-              <div className="bg-zinc-100 group-hover:bg-white group-hover:shadow-sm w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 transition-all duration-300">
-                <Upload size={20} className="text-zinc-500 group-hover:text-blue-600 transition-colors" />
-              </div>
-              <p className="text-[13px] font-bold text-zinc-700 group-hover:text-blue-700 transition-colors">Upload PDF Resume</p>
-              <p className="text-[11px] text-zinc-400 mt-1">Parsed locally. Never leaves your browser.</p>
-            </div>
-          )}
-        </section>
-
-        {/* Recruiter Email Finder */}
-        <section className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <h2 className="text-[14px] font-bold text-zinc-800 flex items-center gap-1.5">
-              <Mail size={16} className="text-blue-500" /> Find Recruiter Email
-            </h2>
-            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              Free & Unlimited
-            </span>
-          </div>
-          
-          <div className="bg-white shadow-sm border border-zinc-200/80 rounded-2xl p-1.5 flex gap-1 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-400/20 transition-all duration-300">
-            <input 
-              type="text"
-              value={recruiterUrl}
-              onChange={(e) => setRecruiterUrl(e.target.value)}
-              placeholder="Paste Recruiter's LinkedIn URL..."
-              className="flex-1 px-3 py-2 text-[12px] bg-transparent outline-none placeholder:text-zinc-400"
-            />
-            <button
-              onClick={verifyRecruiterEmail}
-              disabled={isVerifyingEmail || !recruiterUrl}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-[12px] font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-            >
-              {isVerifyingEmail ? "Verifying..." : "Find Email"}
-            </button>
-          </div>
-          
-          <AnimatePresence>
-            {recruiterEmail && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="mt-2 flex items-center justify-between bg-emerald-50 border border-emerald-200 p-3 rounded-xl"
-              >
-                <div className="flex flex-col">
-                  <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Triple-Verified Work Email</span>
-                  <span className="text-[13px] font-bold text-zinc-900 select-all">{recruiterEmail}</span>
-                </div>
-                <CheckCircle2 size={18} className="text-emerald-500" />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </section>
-
-        {/* Job Section */}
-        <section className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <h2 className="text-[14px] font-bold text-zinc-800 flex items-center gap-1.5">
-              <Briefcase size={16} className="text-blue-500" /> Target Job
-            </h2>
-            {isExtension && (
-              <button 
-                onClick={extractLinkedInJob}
-                className="text-[11px] flex items-center gap-1.5 bg-[#0a66c2]/10 text-[#0a66c2] hover:bg-[#0a66c2]/20 font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm active:scale-95"
-              >
-                <Link size={14} strokeWidth={2.5} /> Auto Extract
-              </button>
-            )}
-          </div>
-          
-          <div className="bg-white shadow-sm border border-zinc-200/80 rounded-2xl overflow-hidden focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-400/20 transition-all duration-300">
-            <input 
-              type="text"
-              value={jobTitle}
-              onChange={(e) => setJobTitle(e.target.value)}
-              placeholder="Job Title & Company..."
-              className="w-full px-4 py-3 text-[13px] font-bold text-zinc-800 border-b border-zinc-100 bg-transparent outline-none placeholder:text-zinc-400 placeholder:font-medium"
-            />
-            <textarea 
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              placeholder="Paste the full job description here..."
-              className="w-full h-28 px-4 py-3 text-[12px] text-zinc-700 bg-transparent outline-none resize-none custom-scrollbar placeholder:text-zinc-400 leading-relaxed"
-            />
-          </div>
-        </section>
-
-        {/* Output Generation */}
-        <section className="bg-white rounded-2xl p-4 shadow-sm border border-zinc-200/80 flex flex-col gap-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-zinc-100/80 p-1.5 rounded-xl">
-            {(["cold_email", "linkedin", "cover_letter", "custom_cv"] as const).map((type) => (
-              <button 
-                key={type}
-                onClick={() => setGenerationType(type)}
-                className={`py-2 rounded-lg text-[12px] font-bold transition-all duration-200 ${
-                  generationType === type 
-                    ? "bg-white text-blue-700 shadow-sm ring-1 ring-zinc-200/50" 
-                    : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/80"
-                }`}
-              >
-                {type === "cold_email" ? "Cold Email" : type === "linkedin" ? "LinkedIn" : type === "custom_cv" ? "Custom CV" : "Letter"}
-              </button>
-            ))}
-          </div>
-
-          <button 
-            onClick={generateContent}
-            disabled={loading}
-            className="w-full bg-zinc-900 hover:bg-black text-white px-5 py-3 rounded-xl text-[14px] font-bold flex items-center justify-center gap-2.5 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed shadow-lg shadow-zinc-900/20 hover:shadow-xl hover:shadow-zinc-900/30 active:scale-[0.98]"
-          >
-            {loading ? (
-              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
-                <Sparkles size={18} className="text-blue-400" />
-              </motion.div>
-            ) : (
-              <Send size={18} className="text-blue-400" />
-            )}
-            {loading ? "Generating Magic..." : "Generate Outreach"}
-          </button>
-        </section>
-
-        {/* Error State */}
+        {/* Error State - Global */}
         <AnimatePresence>
           {error && (
             <motion.div 
-              initial={{ opacity: 0, y: -5 }}
+              initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-red-50 text-red-700 p-3 rounded-xl flex items-start gap-2 border border-red-100 shadow-sm"
+              className="bg-red-50 text-red-700 p-4 rounded-2xl flex items-start gap-3 border border-red-100 shadow-sm mb-6"
             >
-              <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-500" />
-              <p className="text-[11px] font-medium leading-relaxed">{error}</p>
+              <AlertCircle size={20} className="shrink-0 mt-0.5 text-red-500" />
+              <p className="text-sm font-medium leading-relaxed">{error}</p>
+              <button onClick={() => setError("")} className="ml-auto text-red-400 hover:text-red-700">
+                <X size={20} />
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Result Area */}
+        {/* Global Settings Panel */}
         <AnimatePresence>
-          {result && (
+          {showSettings && (
             <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-blue-50/50 rounded-xl p-4 shadow-sm border border-blue-200/60 mb-4 relative overflow-hidden"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden mb-6"
             >
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-indigo-500" />
-              <div className="flex items-center justify-between mb-3 border-b border-blue-100/50 pb-2">
-                <h2 className="text-[12px] font-bold text-blue-900 flex items-center gap-1.5">
-                  <Sparkles size={14} className="text-blue-600" /> Your Draft
-                </h2>
-                <div className="flex items-center gap-2">
-                  {generationType === "cold_email" && (
-                    <button 
-                      onClick={openInEmail}
-                      className="text-[10px] px-2.5 py-1.5 rounded-md transition-all flex items-center gap-1.5 font-bold shadow-sm bg-white text-blue-700 border border-blue-200 hover:bg-blue-50 hover:border-blue-300"
-                    >
-                      <Mail size={12} strokeWidth={2.5} /> Gmail
-                    </button>
-                  )}
-                  <button 
-                    onClick={copyToClipboard}
-                    className={`text-[10px] px-2.5 py-1.5 rounded-md transition-all flex items-center gap-1.5 font-bold shadow-sm ${
-                      copied 
-                        ? 'bg-emerald-500 text-white border-transparent' 
-                        : 'bg-white text-blue-700 border border-blue-200 hover:bg-blue-50 hover:border-blue-300'
-                    }`}
-                  >
-                    {copied ? <CheckCircle2 size={12} strokeWidth={3} /> : <Copy size={12} strokeWidth={2.5} />}
-                    {copied ? "Copied!" : "Copy"}
-                  </button>
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-indigo-100 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500" />
+                <h3 className="text-base font-bold text-zinc-800 mb-4 flex items-center gap-2">
+                  <Settings size={18} className="text-indigo-500" /> API Configuration
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider font-bold text-zinc-500 mb-2">Groq API Key (Primary, Fast)</label>
+                    <input 
+                      type="password"
+                      value={store.groqApiKey}
+                      onChange={(e) => store.setGroqApiKey(e.target.value)}
+                      placeholder="gsk_..."
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border border-zinc-200 bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-zinc-400"
+                    />
+                    <p className="text-xs text-zinc-500 mt-2 font-medium">
+                      Get a free key at <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-indigo-600 hover:text-indigo-700 hover:underline">console.groq.com</a>
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider font-bold text-zinc-500 mb-2">Gemini API Key (Fallback)</label>
+                    <input 
+                      type="password"
+                      value={store.geminiApiKey}
+                      onChange={(e) => store.setGeminiApiKey(e.target.value)}
+                      placeholder="AIza..."
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border border-zinc-200 bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-zinc-400"
+                    />
+                    <p className="text-xs text-zinc-500 mt-2 font-medium">
+                      Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-indigo-600 hover:text-indigo-700 hover:underline">aistudio.google.com</a>
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className={`whitespace-pre-wrap text-[12px] text-zinc-700 leading-relaxed font-sans selection:bg-blue-200/60 ${generationType === "custom_cv" ? "markdown-styles" : ""}`}>
-                {result}
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+
+        {/* Dashboard Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+          
+          {/* Left Column: Inputs & Context */}
+          <div className="lg:col-span-5 space-y-6">
+            
+            {/* Resume Section */}
+            <section className="bg-white rounded-2xl p-5 shadow-sm border border-zinc-200/80">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold text-zinc-800 flex items-center gap-2">
+                  <FileText size={18} className="text-indigo-500" /> Document Context
+                </h2>
+                {store.userResume && <CheckCircle2 size={18} className="text-emerald-500 drop-shadow-sm" />}
+              </div>
+              
+              {store.userResume ? (
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200/80 rounded-xl p-4 group hover:border-indigo-300 transition-all duration-200">
+                  <div className="flex items-center gap-4 overflow-hidden">
+                    <div className="bg-indigo-100 p-2.5 rounded-xl text-indigo-600 shrink-0">
+                      <FileUp size={20} strokeWidth={2.5} />
+                    </div>
+                    <div className="flex flex-col truncate">
+                      <span className="text-sm text-zinc-800 font-bold truncate">{resumeFileName || "resume_parsed.pdf"}</span>
+                      <span className="text-xs text-emerald-600 font-semibold mt-0.5">Parsed & Ready</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => store.setUserResume("")}
+                    className="text-zinc-400 hover:text-red-500 hover:bg-red-50 p-2.5 rounded-xl transition-colors"
+                    title="Remove resume"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              ) : (
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-zinc-200 hover:border-indigo-400 bg-zinc-50 hover:bg-indigo-50/30 rounded-xl p-8 text-center cursor-pointer transition-all duration-300 group"
+                >
+                  <input 
+                    type="file" 
+                    accept="application/pdf" 
+                    className="hidden" 
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                  />
+                  <div className="bg-white shadow-sm ring-1 ring-zinc-200 group-hover:ring-indigo-200 group-hover:shadow-md w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 transition-all duration-300">
+                    <Upload size={24} className="text-zinc-400 group-hover:text-indigo-600 transition-colors" />
+                  </div>
+                  <p className="text-sm font-bold text-zinc-700 group-hover:text-indigo-700 transition-colors">Upload PDF Resume</p>
+                  <p className="text-xs text-zinc-500 mt-2 font-medium">All parsing happens locally in your browser.</p>
+                </div>
+              )}
+            </section>
+
+            {/* Recruiter Section */}
+            <section className="bg-white rounded-2xl p-5 shadow-sm border border-zinc-200/80">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold text-zinc-800 flex items-center gap-2">
+                  <Building size={18} className="text-indigo-500" /> Target Contact
+                </h2>
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 uppercase tracking-wide">
+                  Optional
+                </span>
+              </div>
+              
+              <div className="bg-zinc-50 border border-zinc-200/80 rounded-xl p-1.5 flex gap-2 focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-400/10 transition-all duration-300">
+                <input 
+                  type="text"
+                  value={recruiterUrl}
+                  onChange={(e) => setRecruiterUrl(e.target.value)}
+                  placeholder="Paste Recruiter's LinkedIn URL..."
+                  className="flex-1 px-3 py-2 text-sm bg-transparent outline-none placeholder:text-zinc-400 font-medium"
+                />
+                <button
+                  onClick={verifyRecruiterEmail}
+                  disabled={isVerifyingEmail || !recruiterUrl}
+                  className="bg-zinc-900 hover:bg-black text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-sm"
+                >
+                  {isVerifyingEmail ? "Scanning..." : "Find Email"}
+                </button>
+              </div>
+              
+              <AnimatePresence>
+                {recruiterEmail && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                    animate={{ opacity: 1, height: 'auto', marginTop: 16 }}
+                    className="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-4 rounded-xl"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Found Work Email</span>
+                      <span className="text-sm font-bold text-zinc-900 select-all">{recruiterEmail}</span>
+                    </div>
+                    <div className="bg-white p-1.5 rounded-full shadow-sm">
+                      <CheckCircle2 size={18} className="text-emerald-500" />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </section>
+
+            {/* Job Description Section */}
+            <section className="bg-white rounded-2xl p-5 shadow-sm border border-zinc-200/80 flex flex-col h-[380px]">
+              <div className="flex items-center justify-between mb-4 shrink-0">
+                <h2 className="text-sm font-bold text-zinc-800 flex items-center gap-2">
+                  <Briefcase size={18} className="text-indigo-500" /> Job Details
+                </h2>
+                {isExtension && (
+                  <button 
+                    onClick={extractLinkedInJob}
+                    className="text-xs flex items-center gap-1.5 bg-[#0a66c2]/10 text-[#0a66c2] hover:bg-[#0a66c2]/20 font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm active:scale-95"
+                  >
+                    <Link size={14} strokeWidth={2.5} /> Auto Extract
+                  </button>
+                )}
+              </div>
+              
+              <div className="flex-1 flex flex-col bg-zinc-50 border border-zinc-200/80 rounded-xl overflow-hidden focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-400/10 transition-all duration-300">
+                <input 
+                  type="text"
+                  value={jobTitle}
+                  onChange={(e) => setJobTitle(e.target.value)}
+                  placeholder="Job Title & Company..."
+                  className="w-full px-4 py-4 text-sm font-bold text-zinc-900 border-b border-zinc-200/80 bg-transparent outline-none placeholder:text-zinc-400 shrink-0"
+                />
+                <textarea 
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  placeholder="Paste the full job description here. The AI will analyze this to perfectly tailor your outreach..."
+                  className="w-full flex-1 p-4 text-sm text-zinc-700 bg-transparent outline-none resize-none custom-scrollbar placeholder:text-zinc-400 leading-relaxed"
+                />
+              </div>
+            </section>
+          </div>
+
+          {/* Right Column: Output Generation & Result */}
+          <div className="lg:col-span-7 space-y-6 flex flex-col h-full">
+            
+            {/* Output Controls */}
+            <section className="bg-white rounded-2xl p-5 shadow-sm border border-zinc-200/80">
+              <h2 className="text-sm font-bold text-zinc-800 flex items-center gap-2 mb-4">
+                <Sparkles size={18} className="text-indigo-500" /> Generation Engine
+              </h2>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-zinc-100/80 p-1.5 rounded-xl mb-5">
+                {(["cold_email", "linkedin", "cover_letter", "custom_cv"] as const).map((type) => (
+                  <button 
+                    key={type}
+                    onClick={() => setGenerationType(type)}
+                    className={`py-2.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                      generationType === type 
+                        ? "bg-white text-indigo-700 shadow-sm ring-1 ring-zinc-200/50" 
+                        : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/80"
+                    }`}
+                  >
+                    {type === "cold_email" ? "Cold Email" : type === "linkedin" ? "LinkedIn" : type === "custom_cv" ? "Custom CV" : "Cover Letter"}
+                  </button>
+                ))}
+              </div>
+
+              <button 
+                onClick={generateContent}
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white px-6 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2.5 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/40 active:scale-[0.98]"
+              >
+                {loading ? (
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                    <Sparkles size={18} className="text-white/90" />
+                  </motion.div>
+                ) : (
+                  <Send size={18} className="text-white/90" />
+                )}
+                {loading ? "Crafting your masterpiece..." : "Generate Outreach"}
+              </button>
+            </section>
+
+            {/* Result Area */}
+            <AnimatePresence mode="wait">
+              {result ? (
+                <motion.section 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="flex-1 bg-white rounded-2xl shadow-sm border border-indigo-100 flex flex-col relative overflow-hidden min-h-[400px]"
+                >
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-violet-500" />
+                  
+                  <div className="flex items-center justify-between p-4 border-b border-zinc-100 bg-indigo-50/30">
+                    <h2 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
+                      <FileText size={16} className="text-indigo-600" /> Final Output
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      {generationType === "cold_email" && (
+                        <button 
+                          onClick={openInEmail}
+                          className="text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 font-bold shadow-sm bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300"
+                        >
+                          <Mail size={14} strokeWidth={2.5} /> Send in Gmail
+                        </button>
+                      )}
+                      <button 
+                        onClick={copyToClipboard}
+                        className={`text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 font-bold shadow-sm ${
+                          copied 
+                            ? 'bg-emerald-500 text-white border-transparent' 
+                            : 'bg-zinc-900 text-white border-transparent hover:bg-black'
+                        }`}
+                      >
+                        {copied ? <CheckCircle2 size={14} strokeWidth={3} /> : <Copy size={14} strokeWidth={2.5} />}
+                        {copied ? "Copied to Clipboard" : "Copy Text"}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-white">
+                    <div className={`whitespace-pre-wrap text-sm text-zinc-700 leading-relaxed font-sans max-w-none ${generationType === "custom_cv" ? "markdown-styles" : ""}`}>
+                      {result}
+                    </div>
+                  </div>
+                </motion.section>
+              ) : (
+                <motion.section 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex-1 bg-zinc-100/50 rounded-2xl border border-dashed border-zinc-200 flex flex-col items-center justify-center p-8 text-center min-h-[400px]"
+                >
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm border border-zinc-100 mb-4">
+                    <Sparkles size={28} className="text-zinc-300" />
+                  </div>
+                  <h3 className="text-base font-bold text-zinc-700 mb-2">No Content Generated Yet</h3>
+                  <p className="text-sm text-zinc-500 max-w-xs leading-relaxed">
+                    Upload your resume, paste a job description, and hit generate to craft your tailored outreach.
+                  </p>
+                </motion.section>
+              )}
+            </AnimatePresence>
+            
+          </div>
+        </div>
+      </main>
 
       <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
         
-        .markdown-styles h1 { font-size: 1.25rem; font-weight: bold; color: #1e3a8a; margin-top: 1rem; margin-bottom: 0.5rem; }
-        .markdown-styles h2 { font-size: 1.1rem; font-weight: bold; color: #1e40af; margin-top: 1rem; border-bottom: 1px solid #bfdbfe; padding-bottom: 0.25rem; margin-bottom: 0.5rem; }
-        .markdown-styles h3 { font-size: 1rem; font-weight: 600; color: #1e3a8a; margin-top: 0.75rem; margin-bottom: 0.25rem; }
-        .markdown-styles p { margin-bottom: 0.5rem; }
-        .markdown-styles ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
-        .markdown-styles li { margin-bottom: 0.25rem; }
-        .markdown-styles strong { font-weight: 700; color: #111827; }
+        .markdown-styles h1 { font-size: 1.5rem; font-weight: 800; color: #1e1b4b; margin-top: 1.5rem; margin-bottom: 0.75rem; letter-spacing: -0.025em; }
+        .markdown-styles h2 { font-size: 1.25rem; font-weight: 700; color: #312e81; margin-top: 1.5rem; border-bottom: 2px solid #e0e7ff; padding-bottom: 0.5rem; margin-bottom: 0.75rem; letter-spacing: -0.015em; }
+        .markdown-styles h3 { font-size: 1.1rem; font-weight: 600; color: #3730a3; margin-top: 1rem; margin-bottom: 0.25rem; }
+        .markdown-styles p { margin-bottom: 0.75rem; color: #3f3f46; line-height: 1.6; }
+        .markdown-styles ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; color: #3f3f46; }
+        .markdown-styles li { margin-bottom: 0.375rem; line-height: 1.5; }
+        .markdown-styles li::marker { color: #818cf8; }
+        .markdown-styles strong { font-weight: 700; color: #18181b; }
       `}} />
     </div>
   );
