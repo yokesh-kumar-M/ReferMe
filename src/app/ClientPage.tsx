@@ -107,10 +107,20 @@ export default function ClientPage() {
           func: () => {
             const titleEl = document.querySelector(".job-details-jobs-unified-top-card__job-title") || document.querySelector("h1");
             const descEl = document.getElementById("job-details") || document.querySelector(".jobs-description__content");
+            
+            // Try to find hiring manager LinkedIn URL
+            let hmUrl = "";
+            const hmLinks = Array.from(document.querySelectorAll("a[href*='/in/']"));
+            const hirerCard = hmLinks.find(a => a.closest('.hirer-card__hirer-information'));
+            if (hirerCard) {
+              hmUrl = (hirerCard as HTMLAnchorElement).href;
+            }
+
             return {
               type: "job",
               title: titleEl ? (titleEl as HTMLElement).innerText.trim() : "",
-              description: descEl ? (descEl as HTMLElement).innerText.trim() : ""
+              description: descEl ? (descEl as HTMLElement).innerText.trim() : "",
+              hmUrl: hmUrl.split('?')[0] // Clean URL parameters
             };
           }
         });
@@ -118,6 +128,17 @@ export default function ClientPage() {
         const extracted = injectionResult.result;
         if (extracted?.title) setJobTitle(extracted.title);
         if (extracted?.description) setJobDescription(extracted.description);
+        
+        // Intelligently Auto-select Cover Letter for Job pages
+        setGenerationType("cover_letter");
+        
+        // Intelligently auto-fill Hiring Manager URL if found
+        if (extracted?.hmUrl) {
+           setRecruiterUrl(extracted.hmUrl);
+           // If we found a hiring manager, we might want to Cold Mail instead!
+           setGenerationType("cold_mail");
+        }
+
       } else if (tab.url.includes("linkedin.com/in/")) {
         const [injectionResult] = await chrome.scripting.executeScript({
           target: { tabId: tab.id! },
@@ -125,15 +146,34 @@ export default function ClientPage() {
             const bodyText = document.body.innerText.toLowerCase();
             const isLpu = bodyText.includes("lovely professional university") || bodyText.includes(" lpu ");
             const nameEl = document.querySelector("h1");
+            
+            // Check if user is a recruiter / hiring manager
+            const headlineEl = document.querySelector(".text-body-medium");
+            const headline = headlineEl ? (headlineEl as HTMLElement).innerText.toLowerCase() : "";
+            const isHiringManager = headline.includes("recruiter") || 
+                                    headline.includes("talent") || 
+                                    headline.includes("hiring") || 
+                                    headline.includes("hr ") ||
+                                    headline.includes("human resources");
+
             return {
               type: "profile",
               name: nameEl ? (nameEl as HTMLElement).innerText.trim() : "",
-              isLpu: isLpu
+              isLpu: isLpu,
+              isHiringManager: isHiringManager
             };
           }
         });
         
         setRecruiterUrl(tab.url);
+        
+        // Intelligent switching based on profile type
+        if (injectionResult.result?.isHiringManager) {
+          setGenerationType("cold_mail");
+        } else {
+          setGenerationType("referral");
+        }
+
         if (injectionResult.result?.isLpu) {
           setIsLpuAlumni(true);
         }

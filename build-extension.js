@@ -42,15 +42,15 @@ function processDirectory(dir) {
     } else if (fullPath.endsWith('.html') || fullPath.endsWith('.css') || fullPath.endsWith('.js') || fullPath.endsWith('.json')) {
       let content = fs.readFileSync(fullPath, 'utf8');
       
-      // Update Next.js paths to use the new assets folder
-      content = content.replace(/\/_next\//g, './assets/');
+      // Update Next.js paths to use the new assets folder with ABSOLUTE extension paths (/)
+      // This prevents the Turbopack InvariantError that expects './assets' literal strings.
+      content = content.replace(/\/_next\//g, '/assets/');
       content = content.replace(/_next\//g, 'assets/');
-      content = content.replace(/"\/_next\//g, '"./assets/');
       
-      // General relative path fixing for Chrome Extensions
-      content = content.replace(/href="\/favicon/g, 'href="./favicon');
-      content = content.replace(/'\/pdf\.worker\.min\.mjs'/g, "'./pdf.worker.min.mjs'");
-      content = content.replace(/"\/pdf\.worker\.min\.mjs"/g, '"./pdf.worker.min.mjs"');
+      // General path fixing for Chrome Extensions
+      content = content.replace(/href="\/favicon/g, 'href="/favicon');
+      content = content.replace(/'\/pdf\.worker\.min\.mjs'/g, "'/pdf.worker.min.mjs'");
+      content = content.replace(/"\/pdf\.worker\.min\.mjs"/g, '"/pdf.worker.min.mjs"');
 
       // EXTRACT INLINE SCRIPTS (Fix for Chrome Extension Manifest V3 CSP)
       if (fullPath.endsWith('.html')) {
@@ -70,7 +70,7 @@ function processDirectory(dir) {
           fs.writeFileSync(scriptPath, combinedScript);
           
           // Inject the externalized script right before </body>, or at the end if no </body>
-          const scriptTag = `<script src="./${scriptFileName}"></script>`;
+          const scriptTag = `<script src="/${scriptFileName}"></script>`;
           if (content.includes('</body>')) {
             content = content.replace('</body>', `${scriptTag}</body>`);
           } else {
