@@ -7,7 +7,7 @@ import { sanitizeText, extractRelevantResumeContext } from "@/lib/utils";
 import { 
   Briefcase, FileText, Send, Sparkles, Settings,
   CheckCircle2, AlertCircle, Copy, FileUp, X, Mail, Upload, Link,
-  ChevronRight, Building
+  Building, GraduationCap
 } from "lucide-react";
 
 export default function ClientPage() {
@@ -16,7 +16,7 @@ export default function ClientPage() {
   
   const [jobTitle, setJobTitle] = useState("");
   const [jobDescription, setJobDescription] = useState("");
-  const [generationType, setGenerationType] = useState<"cold_email" | "linkedin" | "cover_letter" | "custom_cv">("cold_email");
+  const [generationType, setGenerationType] = useState<"referral" | "linkedin" | "cover_letter" | "custom_cv">("referral");
   
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState("");
@@ -29,6 +29,7 @@ export default function ClientPage() {
   const [recruiterEmail, setRecruiterEmail] = useState("");
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [isExtension, setIsExtension] = useState(false);
+  const [isLpuAlumni, setIsLpuAlumni] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Wait for component to mount before using Zustand persisted state to avoid hydration errors
@@ -38,6 +39,15 @@ export default function ClientPage() {
       setIsExtension(true);
     }
   }, []);
+
+  // Automatically scrape when in extension mode
+  useEffect(() => {
+    if (isExtension && mounted) {
+      if (!jobTitle && !jobDescription) {
+        extractLinkedInContext();
+      }
+    }
+  }, [isExtension, mounted]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -54,9 +64,6 @@ export default function ClientPage() {
 
     try {
       const pdfjsLib = await import("pdfjs-dist");
-      
-      // Use the local worker file from the public directory instead of a CDN
-      // This fixes CORS/fetch errors and works offline for the Chrome Extension
       pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
       const arrayBuffer = await file.arrayBuffer();
@@ -80,7 +87,7 @@ export default function ClientPage() {
     }
   };
 
-  const extractLinkedInJob = async () => {
+  const extractLinkedInContext = async () => {
     if (!isExtension) {
       setError("This feature is only available when running as a Chrome Extension.");
       return;
@@ -90,27 +97,48 @@ export default function ClientPage() {
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab.url?.includes("linkedin.com/jobs")) {
-        throw new Error("Please navigate to a LinkedIn Job page first.");
+      if (!tab || !tab.url) {
+        throw new Error("No active tab found.");
       }
 
-      const [injectionResult] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id! },
-        func: () => {
-          const titleEl = document.querySelector(".job-details-jobs-unified-top-card__job-title") || document.querySelector("h1");
-          const descEl = document.getElementById("job-details") || document.querySelector(".jobs-description__content");
-          return {
-            title: titleEl ? (titleEl as HTMLElement).innerText.trim() : "",
-            description: descEl ? (descEl as HTMLElement).innerText.trim() : ""
-          };
-        }
-      });
+      if (tab.url.includes("linkedin.com/jobs")) {
+        const [injectionResult] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id! },
+          func: () => {
+            const titleEl = document.querySelector(".job-details-jobs-unified-top-card__job-title") || document.querySelector("h1");
+            const descEl = document.getElementById("job-details") || document.querySelector(".jobs-description__content");
+            return {
+              type: "job",
+              title: titleEl ? (titleEl as HTMLElement).innerText.trim() : "",
+              description: descEl ? (descEl as HTMLElement).innerText.trim() : ""
+            };
+          }
+        });
 
-      const extracted = injectionResult.result;
-      if (extracted?.title) setJobTitle(extracted.title);
-      if (extracted?.description) setJobDescription(extracted.description);
-      if (!extracted?.title && !extracted?.description) {
-        throw new Error("Could not find job details on this page. Try refreshing the page.");
+        const extracted = injectionResult.result;
+        if (extracted?.title) setJobTitle(extracted.title);
+        if (extracted?.description) setJobDescription(extracted.description);
+      } else if (tab.url.includes("linkedin.com/in/")) {
+        const [injectionResult] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id! },
+          func: () => {
+            const bodyText = document.body.innerText.toLowerCase();
+            const isLpu = bodyText.includes("lovely professional university") || bodyText.includes(" lpu ");
+            const nameEl = document.querySelector("h1");
+            return {
+              type: "profile",
+              name: nameEl ? (nameEl as HTMLElement).innerText.trim() : "",
+              isLpu: isLpu
+            };
+          }
+        });
+        
+        setRecruiterUrl(tab.url);
+        if (injectionResult.result?.isLpu) {
+          setIsLpuAlumni(true);
+        }
+      } else {
+        throw new Error("Please navigate to a LinkedIn Job or Profile page first.");
       }
     } catch (err: any) {
       setError(err.message);
@@ -130,7 +158,6 @@ export default function ClientPage() {
     
     // Simulate triple-verified work email finding
     setTimeout(() => {
-      // Mock logic to simulate finding an email
       const domainMatch = jobTitle.toLowerCase().match(/at\s+([a-z0-9-]+)/i) || 
                           jobDescription.toLowerCase().match(/([a-z0-9-]+)\.com/i) ||
                           ["company"];
@@ -160,13 +187,15 @@ export default function ClientPage() {
     setResult("");
 
     let systemPrompt = "";
+    const lpuContext = isLpuAlumni ? `\nCRITICAL: The applicant and the recipient BOTH attended Lovely Professional University (LPU). You MUST prominently leverage this shared alumni connection. Start the message by warmly calling out this shared LPU college connection to build instant rapport before asking for the referral or connection.` : "";
+
     if (generationType === "cover_letter") {
       systemPrompt = `You are an expert career coach writing a highly compelling, professional cover letter. 
       Match the applicant's resume skills strictly to the job description perfectly. 
-      Keep it to 3 concise, engaging paragraphs. Show confidence but be authentic. Do not make up experience.`;
+      Keep it to 3 concise, engaging paragraphs. Show confidence but be authentic. Do not make up experience.${lpuContext}`;
     } else if (generationType === "linkedin") {
       systemPrompt = `You are writing a LinkedIn connection request note (strictly under 300 characters total) to a recruiter or hiring manager for the provided job. 
-      Use the resume for context but keep it very brief, polite, and action-oriented. State the role you are interested in and a 1-sentence value prop.`;
+      Use the resume for context but keep it very brief, polite, and action-oriented. Ask for a referral or a brief chat.${lpuContext}`;
     } else if (generationType === "custom_cv") {
       systemPrompt = `You are an elite executive resume writer. Your task is to rewrite the applicant's provided resume to PERFECTLY match the job description.
       CRITICAL INSTRUCTIONS:
@@ -179,13 +208,13 @@ export default function ClientPage() {
          - Education section.
       4. DO NOT output conversational filler like "Here is your customized CV". Output ONLY the clean Markdown.`;
     } else {
-      systemPrompt = `You are writing a highly effective cold email to the hiring manager for the provided job. 
-      Use the applicant's resume to highlight only the top 1-2 accomplishments that directly map to the job description's top requirements.
+      systemPrompt = `You are writing a highly effective referral request email to a hiring manager or employee at the target company.
+      Use the applicant's resume to highlight only the top 1-2 accomplishments that directly map to the job description's top requirements to impress them with your competence.
       Keep it under 150 words total. Include a strong subject line formatted exactly as:
       Subject: [Your Subject Here]
       
-      Start with a direct hook, provide the value proposition, and end with a low-friction call to action (e.g., a brief chat).
-      Do not be overly formal or use cliché buzzwords. Write like a confident, competent professional.`;
+      Start with a direct hook, provide the value proposition, and end with a low-friction call to action (e.g., asking for a referral or a brief chat).
+      Do not be overly formal or use cliché buzzwords. Write like a confident, competent professional.${lpuContext}`;
     }
 
     const sanitizedJobDesc = sanitizeText(jobDescription);
@@ -495,15 +524,20 @@ export default function ClientPage() {
               )}
             </section>
 
-            {/* Recruiter Section */}
+            {/* Recruiter Section & LPU Check */}
             <section className="bg-white rounded-2xl p-5 shadow-sm border border-zinc-200/80">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-bold text-zinc-800 flex items-center gap-2">
                   <Building size={18} className="text-indigo-500" /> Target Contact
                 </h2>
-                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 uppercase tracking-wide">
-                  Optional
-                </span>
+                {isExtension && (
+                  <button 
+                    onClick={extractLinkedInContext}
+                    className="text-xs flex items-center gap-1.5 bg-[#0a66c2]/10 text-[#0a66c2] hover:bg-[#0a66c2]/20 font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm active:scale-95"
+                  >
+                    <Link size={14} strokeWidth={2.5} /> Scrape Page
+                  </button>
+                )}
               </div>
               
               <div className="bg-zinc-50 border border-zinc-200/80 rounded-xl p-1.5 flex gap-2 focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-400/10 transition-all duration-300">
@@ -540,22 +574,33 @@ export default function ClientPage() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* LPU Alumni Toggle */}
+              <div className="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-orange-50 p-2 rounded-xl text-orange-500 shrink-0 border border-orange-100">
+                    <GraduationCap size={18} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-zinc-800">LPU Alumni Connection</span>
+                    <span className="text-[11px] text-zinc-500 font-medium">Tailor script for fellow LPU alumni</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsLpuAlumni(!isLpuAlumni)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${isLpuAlumni ? 'bg-orange-500' : 'bg-zinc-200'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${isLpuAlumni ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
             </section>
 
             {/* Job Description Section */}
-            <section className="bg-white rounded-2xl p-5 shadow-sm border border-zinc-200/80 flex flex-col h-[380px]">
+            <section className="bg-white rounded-2xl p-5 shadow-sm border border-zinc-200/80 flex flex-col h-[320px]">
               <div className="flex items-center justify-between mb-4 shrink-0">
                 <h2 className="text-sm font-bold text-zinc-800 flex items-center gap-2">
                   <Briefcase size={18} className="text-indigo-500" /> Job Details
                 </h2>
-                {isExtension && (
-                  <button 
-                    onClick={extractLinkedInJob}
-                    className="text-xs flex items-center gap-1.5 bg-[#0a66c2]/10 text-[#0a66c2] hover:bg-[#0a66c2]/20 font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm active:scale-95"
-                  >
-                    <Link size={14} strokeWidth={2.5} /> Auto Extract
-                  </button>
-                )}
               </div>
               
               <div className="flex-1 flex flex-col bg-zinc-50 border border-zinc-200/80 rounded-xl overflow-hidden focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-400/10 transition-all duration-300">
@@ -586,7 +631,7 @@ export default function ClientPage() {
               </h2>
               
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-zinc-100/80 p-1.5 rounded-xl mb-5">
-                {(["cold_email", "linkedin", "cover_letter", "custom_cv"] as const).map((type) => (
+                {(["referral", "linkedin", "cover_letter", "custom_cv"] as const).map((type) => (
                   <button 
                     key={type}
                     onClick={() => setGenerationType(type)}
@@ -596,7 +641,7 @@ export default function ClientPage() {
                         : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200/80"
                     }`}
                   >
-                    {type === "cold_email" ? "Cold Email" : type === "linkedin" ? "LinkedIn" : type === "custom_cv" ? "Custom CV" : "Cover Letter"}
+                    {type === "referral" ? "Referral Request" : type === "linkedin" ? "LinkedIn" : type === "custom_cv" ? "Custom CV" : "Cover Letter"}
                   </button>
                 ))}
               </div>
@@ -633,7 +678,7 @@ export default function ClientPage() {
                       <FileText size={16} className="text-indigo-600" /> Final Output
                     </h2>
                     <div className="flex items-center gap-2">
-                      {generationType === "cold_email" && (
+                      {generationType === "referral" && (
                         <button 
                           onClick={openInEmail}
                           className="text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 font-bold shadow-sm bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300"
