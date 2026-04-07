@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "ReferMe",
+  "version": "1.0.0",
+  "description": "100% Free AI-Powered Job Outreach Generator directly in your browser. Bypass the ATS.",
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Open ReferMe"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.linkedin.com/*"
+  ]
+}
