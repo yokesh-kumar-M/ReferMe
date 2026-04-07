@@ -18,6 +18,18 @@ if (fs.existsSync(nextDir)) {
   console.log("Renamed _next directory to assets.");
 }
 
+// Remove _not-found.html as Chrome extensions don't allow files starting with "_"
+const notFoundFile = path.join(outDir, '_not-found.html');
+if (fs.existsSync(notFoundFile)) {
+  fs.unlinkSync(notFoundFile);
+  console.log("Removed _not-found.html");
+}
+const notFoundMeta = path.join(outDir, '_not-found.meta');
+if (fs.existsSync(notFoundMeta)) {
+  fs.unlinkSync(notFoundMeta);
+  console.log("Removed _not-found.meta");
+}
+
 function processDirectory(dir) {
   if (!fs.existsSync(dir)) return;
   const files = fs.readdirSync(dir);
