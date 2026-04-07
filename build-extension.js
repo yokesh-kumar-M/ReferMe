@@ -49,6 +49,8 @@ function processDirectory(dir) {
       
       // General relative path fixing for Chrome Extensions
       content = content.replace(/href="\/favicon/g, 'href="./favicon');
+      content = content.replace(/'\/pdf\.worker\.min\.mjs'/g, "'./pdf.worker.min.mjs'");
+      content = content.replace(/"\/pdf\.worker\.min\.mjs"/g, '"./pdf.worker.min.mjs"');
       
       fs.writeFileSync(fullPath, content);
     }

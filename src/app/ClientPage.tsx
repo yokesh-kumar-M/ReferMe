@@ -53,8 +53,10 @@ export default function ClientPage() {
 
     try {
       const pdfjsLib = await import("pdfjs-dist");
-      // Use CDN for the worker to avoid dev/prod environment issues
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+      
+      // Use the local worker file from the public directory instead of a CDN
+      // This fixes CORS/fetch errors and works offline for the Chrome Extension
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
