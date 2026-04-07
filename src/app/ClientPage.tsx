@@ -232,7 +232,7 @@ export default function ClientPage() {
         "Authorization": `Bearer ${store.groqApiKey}`
       },
       body: JSON.stringify({
-        model: "llama3-70b-8192",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
