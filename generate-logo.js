@@ -10,23 +10,23 @@ const svgCode = `
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4F46E5" />
-      <stop offset="100%" stop-color="#7C3AED" />
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="100%" stop-color="#312e81" />
     </linearGradient>
-    <linearGradient id="plane" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFFFFF" />
-      <stop offset="100%" stop-color="#E0E7FF" />
+    <linearGradient id="spark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8" />
+      <stop offset="100%" stop-color="#c7d2fe" />
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="20" stdDeviation="30" flood-color="#000000" flood-opacity="0.3"/>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="40" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
   
   <rect width="1024" height="1024" rx="256" fill="url(#bg)" />
   
-  <g transform="translate(512, 512) scale(1.1) translate(-512, -512)" filter="url(#shadow)">
-    <path d="M220 512 L840 280 L608 840 L512 608 Z" fill="url(#plane)" />
-    <path d="M512 608 L840 280 L420 540 Z" fill="#C7D2FE" />
+  <g transform="translate(512, 512) scale(0.85) translate(-512, -512)" filter="url(#glow)">
+    <path d="M512 150 C512 350, 674 512, 874 512 C674 512, 512 674, 512 874 C512 674, 350 512, 150 512 C350 512, 512 350, 512 150 Z" fill="url(#spark)" />
   </g>
 </svg>
 `;

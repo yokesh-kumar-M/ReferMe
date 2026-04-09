@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "ReferMe",
+  "name": "ReferMe Agent",
   "version": "1.0.0",
-  "description": "100% Free AI-Powered Job Outreach Generator directly in your browser. Bypass the ATS.",
+  "description": "Personal AI Agent to detect job applications, extract context, and generate personalized referrals.",
   "action": {
     "default_popup": "index.html",
-    "default_title": "Open ReferMe",
+    "default_title": "Open ReferMe Agent",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
@@ -20,9 +20,26 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "management"
   ],
+  "background": {
+    "service_worker": "hot-reload.js"
+  },
   "host_permissions": [
-    "https://*.linkedin.com/*"
+    "*://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["content.js"],
+      "css": ["content.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["index.html", "*"],
+      "matches": ["*://*/*"]
+    }
   ]
 }

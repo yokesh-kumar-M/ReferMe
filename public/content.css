@@ -1,0 +1,43 @@
+/* content.css */
+#referme-agent-container {
+  position: fixed;
+  top: 0;
+  right: -420px; /* Start hidden */
+  width: 400px;
+  height: 100vh;
+  z-index: 2147483647;
+  transition: right 0.3s ease-in-out;
+  background: white;
+  box-shadow: -4px 0 15px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+#referme-agent-container.open {
+  right: 0;
+}
+
+#referme-agent-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: white;
+}
+
+#referme-agent-toggle {
+  position: absolute;
+  top: 50%;
+  left: -48px;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  background: #4f46e5;
+  color: white;
+  border-radius: 8px 0 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+  font-size: 24px;
+}

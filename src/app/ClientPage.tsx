@@ -9,10 +9,10 @@ import {
   Briefcase, FileText, Send, Sparkles, Settings,
   CheckCircle2, AlertCircle, Copy, FileUp, X, Mail, Upload, Link,
   Building, GraduationCap, Zap, ArrowRight, Clock, Trash2,
-  Plus, User, ChevronDown
+  Plus, User, ChevronDown, Wand2, Download, ListTodo
 } from "lucide-react";
 
-type GenerationType = "referral" | "linkedin" | "cover_letter" | "custom_cv" | "cold_mail";
+type GenerationType = "referral" | "linkedin" | "cover_letter" | "custom_cv" | "cold_mail" | "match_analyzer";
 
 const GENERATION_LABELS: Record<GenerationType, string> = {
   referral: "Referral Request",
@@ -20,6 +20,7 @@ const GENERATION_LABELS: Record<GenerationType, string> = {
   cover_letter: "Cover Letter",
   custom_cv: "Custom CV",
   cold_mail: "Cold Email",
+  match_analyzer: "Match Analyzer",
 };
 
 export default function ClientPage() {
@@ -41,6 +42,7 @@ export default function ClientPage() {
   const [recruiterEmail, setRecruiterEmail] = useState("");
   const [isExtension, setIsExtension] = useState(false);
   const [isLpuAlumni, setIsLpuAlumni] = useState(false);
+  const [isAutofilling, setIsAutofilling] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Email guesser state
@@ -54,9 +56,21 @@ export default function ClientPage() {
 
   useEffect(() => {
     setMounted(true);
-    if (typeof chrome !== "undefined" && chrome.tabs) {
+    const inIframe = window !== window.parent;
+    
+    if (typeof chrome !== "undefined" && chrome.tabs && !inIframe) {
       setIsExtension(true);
     }
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "REFERME_JOB_DATA") {
+        if (event.data.jobTitle) setJobTitle(event.data.jobTitle);
+        if (event.data.jobDescription) setJobDescription(event.data.jobDescription);
+      }
+    };
+    
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   const extractLinkedInContext = useCallback(async () => {
@@ -274,11 +288,19 @@ Subject: [Your Subject Here]
 
 Start with a direct hook, provide the value proposition, and end with a low-friction call to action (e.g., asking for a referral or a brief chat).
 Do not be overly formal or use cliché buzzwords. Write like a confident, competent professional.${lpuContext}`,
+      
+      match_analyzer: `You are an expert ATS (Applicant Tracking System) algorithm. Evaluate the candidate's resume against the target job description. Output a highly structured, ATS Match Analysis in Markdown format. 
+
+CRITICAL INSTRUCTIONS:
+1. Start with a prominent Match Score out of 100 (e.g., **Match Score: 85/100**).
+2. List 'Matched Skills': The strengths that align with the job description.
+3. List 'Missing/Weak Skills': What the candidate lacks based on the job description.
+4. Conclude with 'Actionable Advice': 2-3 specific suggestions on what the candidate should highlight in an interview or quickly upskill on.`,
     };
 
     const systemPrompt = systemPrompts[generationType];
     const sanitizedJobDesc = sanitizeText(jobDescription);
-    const relevantResume = generationType === "custom_cv" 
+    const relevantResume = (generationType === "custom_cv" || generationType === "match_analyzer")
       ? activeResume 
       : extractRelevantResumeContext(activeResume, sanitizedJobDesc);
 
@@ -287,7 +309,7 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
       JOB DESCRIPTION:
       ${sanitizedJobDesc}
       
-      APPLICANT RESUME ${generationType === "custom_cv" ? '(Full Context)' : '(Relevant Context Only)'}:
+      APPLICANT RESUME ${(generationType === "custom_cv" || generationType === "match_analyzer") ? '(Full Context)' : '(Relevant Context Only)'}:
       ${relevantResume}
       ${recruiterEmail ? `\n      TARGET RECRUITER EMAIL: ${recruiterEmail}` : ''}
       
@@ -445,6 +467,138 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
     }
   };
 
+  const autoFillApplication = async () => {
+    if (!store.groqApiKey && !store.geminiApiKey) {
+      setError("Please add an API Key (Groq or Gemini) in the settings.");
+      setShowSettings(true);
+      return;
+    }
+    if (!store.getActiveResume()) {
+      setError("Please upload your resume first to use Autofill.");
+      return;
+    }
+
+    setIsAutofilling(true);
+    setError("");
+
+    try {
+      // 1. Check for recent cached autofill data (Multi-Step Form Persistence)
+      if (typeof chrome !== "undefined" && chrome.storage) {
+        const { autofillCache } = await chrome.storage.local.get("autofillCache") as { autofillCache?: { timestamp: number, data: any } };
+        // Use cache if it's less than 60 minutes old
+        if (autofillCache && autofillCache.timestamp > Date.now() - 60 * 60 * 1000) {
+          console.log("Using cached autofill data...");
+          
+          let data = autofillCache.data;
+          // Dynamically attach the newest cover letter if available
+          if (generationType === "cover_letter" && result) {
+            data.coverLetter = result;
+          }
+
+          window.parent.postMessage({ type: "REFERME_AUTOFILL", payload: data }, "*");
+          setIsAutofilling(false);
+          return;
+        }
+      }
+
+      // 2. Otherwise generate using LLM
+      const systemPrompt = `You are a JSON extraction agent. Extract the applicant's personal information from the provided resume to fill out a job application form. 
+Return ONLY valid JSON with no markdown formatting, backticks, or extra text.
+The JSON must have these exact keys, using empty strings if not found:
+{
+  "firstName": "",
+  "lastName": "",
+  "fullName": "",
+  "email": "",
+  "phone": "",
+  "linkedin": "",
+  "website": ""
+}`;
+      const userPrompt = store.getActiveResume();
+      let jsonText = "";
+
+      if (store.groqApiKey) {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${store.groqApiKey}`
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
+            ],
+            temperature: 0.1,
+            response_format: { type: "json_object" }
+          })
+        });
+        
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error?.message || "Groq request failed");
+        }
+        
+        const data = await response.json();
+        jsonText = data.choices[0].message.content;
+      } else if (store.geminiApiKey) {
+         const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${store.geminiApiKey}`, 
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+              generationConfig: { 
+                temperature: 0.1,
+                responseMimeType: "application/json"
+              }
+            })
+          }
+        );
+        
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error?.message || "Gemini request failed");
+        }
+        
+        const data = await response.json();
+        jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+      } else {
+        throw new Error("API key required for JSON autofill.");
+      }
+
+      const extractedData = JSON.parse(jsonText);
+      
+      // Save to chrome storage for persistence across pagination (Workday, etc)
+      if (typeof chrome !== "undefined" && chrome.storage) {
+        await chrome.storage.local.set({
+          autofillCache: {
+            timestamp: Date.now(),
+            data: extractedData
+          }
+        });
+      }
+
+      if (generationType === "cover_letter" && result) {
+        extractedData.coverLetter = result;
+      }
+
+      window.parent.postMessage({
+        type: "REFERME_AUTOFILL",
+        payload: extractedData
+      }, "*");
+      
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to extract autofill data.";
+      setError(message);
+    } finally {
+      setIsAutofilling(false);
+    }
+  };
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(result);
     setCopied(true);
@@ -465,6 +619,34 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
     window.open(mailtoLink, "_blank");
   };
 
+  const downloadPDF = async () => {
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const element = document.querySelector(".markdown-output");
+      if (!element) return;
+      
+      const opt = {
+        margin:       10,
+        filename:     `Resume_${jobTitle.replace(/[^a-zA-Z0-9]/g, '_') || 'Custom'}.pdf`,
+        image:        { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas:  { scale: 2 },
+        jsPDF:        { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const }
+      };
+
+      // Wrap in a temporary styled div to ensure PDF looks like a clean document
+      const printWrapper = document.createElement("div");
+      printWrapper.innerHTML = element.innerHTML;
+      printWrapper.style.padding = "20px";
+      printWrapper.style.fontFamily = "Arial, sans-serif";
+      printWrapper.style.color = "#000";
+      
+      html2pdf().set(opt).from(printWrapper).save();
+    } catch (e) {
+      console.error("Failed to generate PDF", e);
+      setError("Failed to generate PDF. Make sure you are generating a Custom CV.");
+    }
+  };
+
   // --- Computed state for step indicator ---
   const completedSteps = [
     !!store.getActiveResume(),
@@ -478,6 +660,61 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
       <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans flex flex-col items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
         <p className="mt-4 text-zinc-500">Loading ReferMe...</p>
+      </div>
+    );
+  }
+
+  const hasApiKey = store.groqApiKey || store.geminiApiKey;
+
+  if (!hasApiKey) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6 text-zinc-900 font-sans selection:bg-indigo-200">
+        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-xl shadow-indigo-500/10 border border-zinc-200/80 text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 to-violet-500" />
+          <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-indigo-600 shadow-inner">
+            <Sparkles size={32} strokeWidth={2.5} />
+          </div>
+          <h2 className="text-2xl font-black tracking-tight mb-2">Welcome to ReferMe Agent</h2>
+          <p className="text-sm text-zinc-500 mb-8 leading-relaxed">
+            Your personal AI job application assistant. To get started, please provide an API key. Your key is stored securely in your browser.
+          </p>
+          
+          <div className="space-y-4 text-left">
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-2">Groq API Key (Recommended)</label>
+              <input 
+                type="password"
+                value={store.groqApiKey}
+                onChange={(e) => store.setGroqApiKey(e.target.value)}
+                placeholder="gsk_..."
+                className="w-full px-4 py-3 text-sm rounded-xl border border-zinc-200 bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-zinc-400"
+              />
+              <p className="text-[10px] text-zinc-500 mt-2 font-medium text-right">
+                <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-indigo-600 hover:text-indigo-700 hover:underline transition-colors">Get a Groq key &rarr;</a>
+              </p>
+            </div>
+            
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-zinc-100"></div>
+              <span className="flex-shrink-0 mx-4 text-zinc-300 text-[10px] font-bold uppercase tracking-widest">or</span>
+              <div className="flex-grow border-t border-zinc-100"></div>
+            </div>
+            
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider font-bold text-zinc-500 mb-2">Gemini API Key</label>
+              <input 
+                type="password"
+                value={store.geminiApiKey}
+                onChange={(e) => store.setGeminiApiKey(e.target.value)}
+                placeholder="AIza..."
+                className="w-full px-4 py-3 text-sm rounded-xl border border-zinc-200 bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-zinc-400"
+              />
+              <p className="text-[10px] text-zinc-500 mt-2 font-medium text-right">
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-indigo-600 hover:text-indigo-700 hover:underline transition-colors">Get a Gemini key &rarr;</a>
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -500,8 +737,8 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
             onClick={() => setShowHistory(!showHistory)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${showHistory ? 'bg-violet-50 text-violet-600 shadow-sm border border-violet-200' : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 shadow-sm'}`}
           >
-            <Clock size={18} />
-            <span className="text-sm font-bold hidden sm:inline">History</span>
+            <ListTodo size={18} />
+            <span className="text-sm font-bold hidden sm:inline">Tracker</span>
             {store.history.length > 0 && (
               <span className="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{store.history.length}</span>
             )}
@@ -625,11 +862,11 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
                 <div className="absolute top-0 left-0 w-1.5 h-full bg-violet-500" />
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-base font-bold text-zinc-800 flex items-center gap-2">
-                    <Clock size={18} className="text-violet-500" /> Generation History
+                    <ListTodo size={18} className="text-violet-500" /> Application Tracker
                   </h3>
                   {store.history.length > 0 && (
                     <button
-                      onClick={() => { if (confirm('Clear all history?')) store.clearHistory(); }}
+                      onClick={() => { if (confirm('Clear all tracked applications?')) store.clearHistory(); }}
                       className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
                     >
                       <Trash2 size={14} /> Clear All
@@ -637,7 +874,7 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
                   )}
                 </div>
                 {store.history.length === 0 ? (
-                  <p className="text-sm text-zinc-400 text-center py-6">No generation history yet.</p>
+                  <p className="text-sm text-zinc-400 text-center py-6">No jobs tracked yet.</p>
                 ) : (
                   <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
                     {store.history.map((entry) => (
@@ -986,12 +1223,36 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
                       <FileText size={16} className="text-indigo-600" /> Final Output
                     </h2>
                     <div className="flex items-center gap-2">
+                      {isExtension && (
+                        <button 
+                          onClick={autoFillApplication}
+                          disabled={isAutofilling}
+                          className="text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 font-bold shadow-sm bg-gradient-to-r from-emerald-500 to-teal-500 text-white border border-transparent hover:from-emerald-600 hover:to-teal-600 disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                          {isAutofilling ? (
+                            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                              <Wand2 size={14} strokeWidth={2.5} />
+                            </motion.div>
+                          ) : (
+                            <Wand2 size={14} strokeWidth={2.5} />
+                          )}
+                          Autofill Form
+                        </button>
+                      )}
                       {(generationType === "referral" || generationType === "cold_mail" || generationType === "cover_letter") && (
                         <button 
                           onClick={openInEmail}
                           className="text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 font-bold shadow-sm bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300"
                         >
                           <Mail size={14} strokeWidth={2.5} /> Send in Gmail
+                        </button>
+                      )}
+                      {generationType === "custom_cv" && (
+                        <button 
+                          onClick={downloadPDF}
+                          className="text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 font-bold shadow-sm bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300"
+                        >
+                          <Download size={14} strokeWidth={2.5} /> Download PDF
                         </button>
                       )}
                       <button 
@@ -1009,7 +1270,7 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
                   </div>
                   
                   <div className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-white">
-                    {generationType === "custom_cv" ? (
+                    {(generationType === "custom_cv" || generationType === "match_analyzer") ? (
                       <div 
                         className="markdown-output text-sm leading-relaxed max-w-none"
                         dangerouslySetInnerHTML={{ __html: renderMarkdown(result) }} 
