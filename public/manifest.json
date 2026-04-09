@@ -5,7 +5,17 @@
   "description": "100% Free AI-Powered Job Outreach Generator directly in your browser. Bypass the ATS.",
   "action": {
     "default_popup": "index.html",
-    "default_title": "Open ReferMe"
+    "default_title": "Open ReferMe",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
   },
   "permissions": [
     "activeTab",

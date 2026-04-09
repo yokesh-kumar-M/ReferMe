@@ -4,10 +4,12 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAppStore } from "@/store/appStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { sanitizeText, extractRelevantResumeContext, renderMarkdown } from "@/lib/utils";
+import { generateEmailGuesses, type EmailGuess } from "@/lib/emailGuesser";
 import { 
   Briefcase, FileText, Send, Sparkles, Settings,
   CheckCircle2, AlertCircle, Copy, FileUp, X, Mail, Upload, Link,
-  Building, GraduationCap, Zap, ArrowRight
+  Building, GraduationCap, Zap, ArrowRight, Clock, Trash2,
+  Plus, User, ChevronDown
 } from "lucide-react";
 
 type GenerationType = "referral" | "linkedin" | "cover_letter" | "custom_cv" | "cold_mail";
@@ -40,6 +42,15 @@ export default function ClientPage() {
   const [isExtension, setIsExtension] = useState(false);
   const [isLpuAlumni, setIsLpuAlumni] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Email guesser state
+  const [emailGuesses, setEmailGuesses] = useState<EmailGuess[]>([]);
+  // History panel
+  const [showHistory, setShowHistory] = useState(false);
+  // Profile management
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [newProfileName, setNewProfileName] = useState("");
+  const [showNewProfileInput, setShowNewProfileInput] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -191,20 +202,20 @@ export default function ClientPage() {
     }
   };
 
-  const generateEmailGuess = () => {
+  const handleGenerateEmailGuesses = () => {
     if (!recruiterUrl) {
       setError("Please paste a recruiter's LinkedIn URL.");
       return;
     }
     
-    const domainMatch = jobTitle.toLowerCase().match(/at\s+([a-z0-9-]+)/i) || 
-                        jobDescription.toLowerCase().match(/([a-z0-9-]+)\.com/i);
-    const domain = domainMatch?.[1]?.replace(/[^a-z0-9]/g, '') || "company";
+    const guesses = generateEmailGuesses(recruiterUrl, jobTitle, jobDescription);
+    if (guesses.length === 0) {
+      setError("Could not extract name or company from the URL and job details. Please check the inputs.");
+      return;
+    }
     
-    const nameMatch = recruiterUrl.match(/in\/([a-z0-9-]+)/i);
-    const name = nameMatch ? nameMatch[1].split('-')[0] : "hiring";
-    
-    setRecruiterEmail(`${name}@${domain}.com`);
+    setEmailGuesses(guesses);
+    setRecruiterEmail(guesses[0].email); // Default to highest confidence
   };
 
   const generateContent = async () => {
@@ -213,7 +224,7 @@ export default function ClientPage() {
       setShowSettings(true);
       return;
     }
-    if (!store.userResume) {
+    if (!store.getActiveResume()) {
       setError("Please upload your resume first.");
       return;
     }
@@ -225,6 +236,8 @@ export default function ClientPage() {
     setLoading(true);
     setError("");
     setResult("");
+
+    const activeResume = store.getActiveResume();
 
     const lpuContext = isLpuAlumni 
       ? `\nCRITICAL: The applicant and the recipient BOTH attended Lovely Professional University (LPU). You MUST prominently leverage this shared alumni connection. Start the message by warmly calling out this shared LPU college connection to build instant rapport.` 
@@ -266,8 +279,8 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
     const systemPrompt = systemPrompts[generationType];
     const sanitizedJobDesc = sanitizeText(jobDescription);
     const relevantResume = generationType === "custom_cv" 
-      ? store.userResume 
-      : extractRelevantResumeContext(store.userResume, sanitizedJobDesc);
+      ? activeResume 
+      : extractRelevantResumeContext(activeResume, sanitizedJobDesc);
 
     const userPrompt = `
       JOB TITLE: ${sanitizeText(jobTitle)}
@@ -283,26 +296,40 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
 
     try {
       if (store.groqApiKey) {
-        await tryGenerateWithGroq(systemPrompt, userPrompt);
+        try {
+          await tryGenerateWithGroq(systemPrompt, userPrompt);
+        } catch (groqErr: unknown) {
+          console.warn("Groq failed, attempting Gemini fallback:", groqErr);
+          if (store.geminiApiKey) {
+            await tryGenerateWithGemini(systemPrompt, userPrompt);
+          } else {
+            throw groqErr;
+          }
+        }
+      } else if (store.geminiApiKey) {
+        await tryGenerateWithGemini(systemPrompt, userPrompt);
       } else {
-        throw new Error("No Groq API key available.");
+        throw new Error("No API keys configured.");
       }
     } catch (err: unknown) {
-      console.warn("Groq failed, attempting Gemini fallback:", err);
-      if (store.geminiApiKey) {
-        try {
-          await tryGenerateWithGemini(systemPrompt, userPrompt);
-        } catch (geminiErr: unknown) {
-          const message = geminiErr instanceof Error ? geminiErr.message : "Unknown error";
-          setError(`Both models failed. Gemini Error: ${message}`);
-          setLoading(false);
-        }
-      } else {
-        const message = err instanceof Error ? err.message : "Failed to generate content.";
-        setError(message);
-        setLoading(false);
-      }
+      const message = err instanceof Error ? err.message : "Failed to generate content.";
+      setError(message);
+      setLoading(false);
+      return;
     }
+
+    // Save to history after generation completes
+    // We read result from the latest state via a micro-delay
+    setTimeout(() => {
+      const currentResult = document.querySelector('.whitespace-pre-wrap, .markdown-output')?.textContent;
+      if (currentResult) {
+        store.addHistoryEntry({
+          type: generationType,
+          jobTitle: jobTitle || 'Untitled',
+          result: currentResult,
+        });
+      }
+    }, 500);
   };
 
   const tryGenerateWithGroq = async (systemPrompt: string, userPrompt: string) => {
@@ -412,7 +439,7 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
       // Keep only the tail after last match to avoid re-processing
       if (matches.length > 0) {
         const lastMatch = matches[matches.length - 1];
-        const lastIndex = buffer.lastIndexOf(lastMatch[0]) + lastMatch[0].length;
+        const lastIndex = (lastMatch.index || 0) + lastMatch[0].length;
         buffer = buffer.slice(lastIndex);
       }
     }
@@ -440,7 +467,7 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
 
   // --- Computed state for step indicator ---
   const completedSteps = [
-    !!store.userResume,
+    !!store.getActiveResume(),
     !!jobDescription,
     !!result,
   ];
@@ -468,13 +495,25 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
             <p className="text-xs text-zinc-500 font-medium leading-none mt-1">AI-Powered Career Toolkit</p>
           </div>
         </div>
-        <button 
-          onClick={() => setShowSettings(!showSettings)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${showSettings ? 'bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-200' : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 shadow-sm'}`}
-        >
-          <Settings size={18} />
-          <span className="text-sm font-bold hidden sm:inline">Settings</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setShowHistory(!showHistory)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${showHistory ? 'bg-violet-50 text-violet-600 shadow-sm border border-violet-200' : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 shadow-sm'}`}
+          >
+            <Clock size={18} />
+            <span className="text-sm font-bold hidden sm:inline">History</span>
+            {store.history.length > 0 && (
+              <span className="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{store.history.length}</span>
+            )}
+          </button>
+          <button 
+            onClick={() => setShowSettings(!showSettings)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${showSettings ? 'bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-200' : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 shadow-sm'}`}
+          >
+            <Settings size={18} />
+            <span className="text-sm font-bold hidden sm:inline">Settings</span>
+          </button>
+        </div>
       </header>
 
       {/* Step Progress Indicator */}
@@ -572,6 +611,68 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
           )}
         </AnimatePresence>
 
+        {/* History Panel */}
+        <AnimatePresence>
+          {showHistory && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden mb-6"
+            >
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-violet-100 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-violet-500" />
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-bold text-zinc-800 flex items-center gap-2">
+                    <Clock size={18} className="text-violet-500" /> Generation History
+                  </h3>
+                  {store.history.length > 0 && (
+                    <button
+                      onClick={() => { if (confirm('Clear all history?')) store.clearHistory(); }}
+                      className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                    >
+                      <Trash2 size={14} /> Clear All
+                    </button>
+                  )}
+                </div>
+                {store.history.length === 0 ? (
+                  <p className="text-sm text-zinc-400 text-center py-6">No generation history yet.</p>
+                ) : (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                    {store.history.map((entry) => (
+                      <div key={entry.id} className="flex items-center gap-3 bg-zinc-50 border border-zinc-200/80 rounded-xl p-3 hover:border-violet-300 transition-all group">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">{entry.type.replace('_', ' ')}</span>
+                            <span className="text-[10px] text-zinc-400">{new Date(entry.timestamp).toLocaleDateString()}</span>
+                          </div>
+                          <p className="text-sm font-bold text-zinc-700 truncate">{entry.jobTitle}</p>
+                          <p className="text-xs text-zinc-400 truncate">{entry.result.slice(0, 80)}...</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => { setResult(entry.result); setShowHistory(false); }}
+                            className="text-xs bg-violet-100 text-violet-700 hover:bg-violet-200 px-2.5 py-1.5 rounded-lg font-bold"
+                          >
+                            Restore
+                          </button>
+                          <button
+                            onClick={() => store.deleteHistoryEntry(entry.id)}
+                            className="text-zinc-400 hover:text-red-500 p-1"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Dashboard Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           
@@ -584,10 +685,99 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
                 <h2 className="text-sm font-bold text-zinc-800 flex items-center gap-2">
                   <FileText size={18} className="text-indigo-500" /> Document Context
                 </h2>
-                {store.userResume && <CheckCircle2 size={18} className="text-emerald-500 drop-shadow-sm" />}
+                {store.getActiveResume() && <CheckCircle2 size={18} className="text-emerald-500 drop-shadow-sm" />}
+              </div>
+
+              {/* Profile Selector */}
+              <div className="mb-4 relative">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() => setShowProfileMenu(!showProfileMenu)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 bg-zinc-50 border border-zinc-200/80 rounded-xl text-sm font-bold text-zinc-700 hover:border-indigo-300 transition-all"
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <User size={14} className="text-indigo-500 shrink-0" />
+                        {store.resumeProfiles.find(p => p.id === store.activeProfileId)?.name || 'Default Resume'}
+                      </span>
+                      <ChevronDown size={14} className={`text-zinc-400 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`} />
+                    </button>
+                    <AnimatePresence>
+                      {showProfileMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          className="absolute z-20 top-full mt-1 w-full bg-white border border-zinc-200 rounded-xl shadow-lg overflow-hidden"
+                        >
+                          {store.resumeProfiles.map((profile) => (
+                            <div
+                              key={profile.id}
+                              className={`flex items-center justify-between px-3 py-2.5 cursor-pointer transition-all text-sm ${
+                                profile.id === store.activeProfileId ? 'bg-indigo-50 text-indigo-700 font-bold' : 'hover:bg-zinc-50 text-zinc-700'
+                              }`}
+                            >
+                              <span
+                                className="flex-1 truncate"
+                                onClick={() => { store.setActiveProfileId(profile.id); setShowProfileMenu(false); }}
+                              >{profile.name}</span>
+                              {profile.id !== 'default' && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); store.deleteResumeProfile(profile.id); }}
+                                  className="text-zinc-400 hover:text-red-500 p-0.5 shrink-0"
+                                >
+                                  <X size={12} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {showNewProfileInput ? (
+                            <div className="px-3 py-2 border-t border-zinc-100">
+                              <div className="flex gap-1.5">
+                                <input
+                                  value={newProfileName}
+                                  onChange={(e) => setNewProfileName(e.target.value)}
+                                  placeholder="Profile name..."
+                                  className="flex-1 px-2 py-1.5 text-sm rounded-lg border border-zinc-200 bg-zinc-50 outline-none focus:border-indigo-400 min-w-0"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && newProfileName.trim()) {
+                                      store.addResumeProfile(newProfileName.trim(), '');
+                                      setNewProfileName('');
+                                      setShowNewProfileInput(false);
+                                      setShowProfileMenu(false);
+                                    }
+                                  }}
+                                />
+                                <button
+                                  onClick={() => {
+                                    if (newProfileName.trim()) {
+                                      store.addResumeProfile(newProfileName.trim(), '');
+                                      setNewProfileName('');
+                                      setShowNewProfileInput(false);
+                                      setShowProfileMenu(false);
+                                    }
+                                  }}
+                                  className="bg-indigo-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold shrink-0"
+                                >Add</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setShowNewProfileInput(true)}
+                              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-indigo-600 font-bold hover:bg-indigo-50 border-t border-zinc-100"
+                            >
+                              <Plus size={14} /> New Profile
+                            </button>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
               </div>
               
-              {store.userResume ? (
+              {store.getActiveResume() ? (
                 <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200/80 rounded-xl p-4 group hover:border-indigo-300 transition-all duration-200">
                   <div className="flex items-center gap-4 overflow-hidden">
                     <div className="bg-indigo-100 p-2.5 rounded-xl text-indigo-600 shrink-0">
@@ -652,7 +842,7 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
                   className="flex-1 px-3 py-2 text-sm bg-transparent outline-none placeholder:text-zinc-400 font-medium min-w-0"
                 />
                 <button
-                  onClick={generateEmailGuess}
+                  onClick={handleGenerateEmailGuesses}
                   disabled={!recruiterUrl}
                   className="bg-zinc-900 hover:bg-black text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-sm shrink-0"
                 >
@@ -661,18 +851,32 @@ Do not be overly formal or use cliché buzzwords. Write like a confident, compet
               </div>
               
               <AnimatePresence>
-                {recruiterEmail && (
+                {emailGuesses.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0, height: 0, marginTop: 0 }}
                     animate={{ opacity: 1, height: 'auto', marginTop: 16 }}
-                    className="flex items-center justify-between bg-amber-50 border border-amber-200 p-4 rounded-xl"
+                    className="space-y-2"
                   >
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider mb-1">Estimated Email (Not Verified)</span>
-                      <span className="text-sm font-bold text-zinc-900 select-all">{recruiterEmail}</span>
-                    </div>
-                    <div className="bg-white p-1.5 rounded-full shadow-sm">
-                      <Zap size={18} className="text-amber-500" />
+                    <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">Select Best Guess (Not Verified)</span>
+                    <div className="space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar">
+                      {emailGuesses.map((guess, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setRecruiterEmail(guess.email)}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-all text-sm ${
+                            recruiterEmail === guess.email
+                              ? 'bg-indigo-50 border border-indigo-200 ring-2 ring-indigo-400/20'
+                              : 'bg-zinc-50 border border-zinc-200/80 hover:bg-zinc-100'
+                          }`}
+                        >
+                          <span className="font-bold text-zinc-800 select-all">{guess.email}</span>
+                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                            guess.confidence === 'high' ? 'bg-emerald-100 text-emerald-700' :
+                            guess.confidence === 'medium' ? 'bg-amber-100 text-amber-700' :
+                            'bg-zinc-100 text-zinc-500'
+                          }`}>{guess.confidence}</span>
+                        </button>
+                      ))}
                     </div>
                   </motion.div>
                 )}

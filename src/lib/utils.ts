@@ -201,6 +201,8 @@ export function renderMarkdown(text: string): string {
 }
 
 function applyInlineFormatting(text: string): string {
+  // Escape HTML to prevent XSS
+  text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // Bold: **text** or __text__
   text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');

@@ -1,0 +1,45 @@
+const fs = require('fs');
+const sharp = require('sharp');
+const path = require('path');
+const { execSync } = require('child_process');
+
+const svgPath = path.join(__dirname, 'logo.svg');
+const sourcePngPath = path.join(__dirname, 'source-logo.png');
+
+const svgCode = `
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#7C3AED" />
+    </linearGradient>
+    <linearGradient id="plane" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#E0E7FF" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="20" stdDeviation="30" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <rect width="1024" height="1024" rx="256" fill="url(#bg)" />
+  
+  <g transform="translate(512, 512) scale(1.1) translate(-512, -512)" filter="url(#shadow)">
+    <path d="M220 512 L840 280 L608 840 L512 608 Z" fill="url(#plane)" />
+    <path d="M512 608 L840 280 L420 540 Z" fill="#C7D2FE" />
+  </g>
+</svg>
+`;
+
+fs.writeFileSync(svgPath, svgCode);
+
+sharp(svgPath)
+  .png()
+  .toFile(sourcePngPath)
+  .then(() => {
+    console.log('Created source-logo.png');
+    execSync(`node generate-icons.js source-logo.png`, { cwd: __dirname, stdio: 'inherit' });
+  })
+  .catch(err => {
+    console.error('Error:', err);
+  });
