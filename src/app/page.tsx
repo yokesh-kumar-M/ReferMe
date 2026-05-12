@@ -196,12 +196,12 @@ export default function LandingPage() {
           <div className="relative group">
             <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-violet-500 rounded-2xl blur opacity-50 group-hover:opacity-80 transition duration-300" />
             <a
-              href="https://github.com/yokesh-kumar-M/ReferMe"
+              href="https://github.com/yokesh-kumar-M/ReferMe/releases/latest"
               target="_blank"
               rel="noreferrer"
               className="relative flex items-center gap-2 bg-[#09090b] border border-zinc-700 text-white px-7 py-3.5 rounded-2xl text-base font-bold transition-all hover:scale-[0.98]"
             >
-              <Globe size={18} /> Get the Extension
+              <Download size={18} /> Download Extension
             </a>
           </div>
           <Link href="/dashboard">
@@ -416,12 +416,12 @@ export default function LandingPage() {
               <div className="relative group">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-violet-500 rounded-2xl blur opacity-60 group-hover:opacity-90 transition duration-300" />
                 <a
-                  href="https://github.com/yokesh-kumar-M/ReferMe"
+                  href="https://github.com/yokesh-kumar-M/ReferMe/releases/latest"
                   target="_blank"
                   rel="noreferrer"
                   className="relative flex items-center gap-2 bg-[#09090b] border border-zinc-700 text-white px-8 py-4 rounded-2xl text-base font-bold transition-all hover:scale-[0.98]"
                 >
-                  <Globe size={18} /> Download Extension
+                  <Download size={18} /> Download Extension
                 </a>
               </div>
               <Link href="/dashboard">
@@ -447,6 +447,9 @@ export default function LandingPage() {
           <div className="flex items-center gap-5">
             <a href="https://github.com/yokesh-kumar-M/ReferMe" target="_blank" rel="noreferrer" className="hover:text-zinc-400 transition-colors flex items-center gap-1">
               <Globe size={12} /> GitHub
+            </a>
+            <a href="https://github.com/yokesh-kumar-M/ReferMe/releases/latest" target="_blank" rel="noreferrer" className="hover:text-zinc-400 transition-colors flex items-center gap-1">
+              <Download size={12} /> Releases
             </a>
             <Link href="/dashboard" className="hover:text-zinc-400 transition-colors">Dashboard</Link>
             <Link href="/dashboard/settings" className="hover:text-zinc-400 transition-colors">Settings</Link>

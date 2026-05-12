@@ -1,48 +1,64 @@
-# ReferMe - 100% Free AI Job Outreach Platform
+# ReferMe — AI Job Application Agent
 
-**Stop Clicking "Apply." Let AI Pitch You Directly to Hiring Managers—For Free.**
+> Detect job forms. Autofill everything. Generate cover letters. Track applications. All free, all local.
 
-Bypass the ATS black hole with ReferMe. Our Chrome extension instantly finds verified recruiter emails on LinkedIn, writes hyper-personalized outreach messages, and sends them right from your Gmail. Get the exact power of premium AI networking tools with **zero paywalls and absolutely no credit limits.** Because finding a job shouldn't cost you a monthly subscription.
+**Full instructions, feature walkthroughs, and FAQ are on the project website:**
+👉 [referme-agent.vercel.app](https://referme-agent.vercel.app)
 
-## The Problem
+---
 
-There is nothing more frustrating than being unemployed, finding the *perfect* job, writing a great outreach email... and getting hit with a popup that says: *"You are out of credits. Please upgrade to our $39/mo plan."*
+## Download
 
-Your job hunt shouldn't be held hostage by a paywall. 
+Get the latest packaged extension from the [Releases page](https://github.com/yokesh-kumar-M/ReferMe/releases/latest).
 
-## The Solution: ReferMe
+1. Download `extension.zip` from the latest release.
+2. Unzip it.
+3. Open Chrome → `chrome://extensions` → enable **Developer mode**.
+4. Click **Load unpacked** and select the unzipped folder.
 
-We built **ReferMe** to democratize the job search. It's a Chrome extension that gives you unlimited 5-layer email verification and infinite AI-drafted networking emails. 
-
-Scale your outreach. Contact 30+ recruiters a day. Land the interview. Keep your money. 
-
-### Features:
-
-✅ **Finds the recruiter's verified email on LinkedIn** (Unlimited)
-✅ **Drafts a hyper-personalized AI pitch based on your skills** (Uncapped)
-✅ **Sends directly from your Gmail**
-❌ **NO paywalls. NO credit limits.**
-
-## The Workflow Hack
-
-Here is the ultimate cheat code to get your resume to the top of the pile:
-
-1. Find a job you want on LinkedIn.
-2. Open the **ReferMe** Chrome extension.
-3. Let it automatically find the hiring manager's verified work email.
-4. Let our AI draft a personalized, highly relevant pitch comparing your skills to the job description.
-5. Click send (it goes right through your personal Gmail).
-
-Total time: 45 seconds. Total cost: $0.00.
+---
 
 ## Development
 
-This is a Next.js project configured to build as a Chrome Extension.
-
 ```bash
 npm install
-npm run build:ext
+npm run build:ext   # builds + zips → extension.zip and out/
 ```
 
-Upload the generated `extension.zip` or the `out` directory to the Chrome Web Store to publish.
+Then load the `out/` directory in Chrome via **Load unpacked**.
 
+To run the web dashboard locally:
+
+```bash
+npm run dev
+```
+
+### Backend
+
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+---
+
+## Releasing a new version
+
+Push a semver tag to trigger the release workflow:
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+GitHub Actions will build `extension.zip` and publish it as a GitHub Release automatically.
+
+---
+
+## Stack
+
+- **Extension & Dashboard**: Next.js 16 (static export for extension, SSR for dashboard)
+- **AI**: Groq `llama-3.3-70b-versatile` · Gemini 2.0 Flash
+- **Backend**: Express proxy (Render)
+- **Deployment**: Vercel (dashboard) · GitHub Releases (extension)
