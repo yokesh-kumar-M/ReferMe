@@ -92,3 +92,23 @@ body {
   font-size: 0.85em;
   font-family: var(--font-geist-mono), monospace;
 }
+
+/* Dashboard markdown (AI Toolkit page) */
+.ai-markdown-output h1 { font-size: 1.4rem; font-weight: 800; color: #1e1b4b; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+.ai-markdown-output h2 { font-size: 1.15rem; font-weight: 700; color: #312e81; margin-top: 1.25rem; border-bottom: 2px solid #e0e7ff; padding-bottom: 0.4rem; margin-bottom: 0.6rem; }
+.ai-markdown-output h3 { font-size: 1rem; font-weight: 600; color: #3730a3; margin-top: 0.75rem; margin-bottom: 0.25rem; }
+.ai-markdown-output p { margin-bottom: 0.65rem; color: #3f3f46; line-height: 1.65; font-size: 0.875rem; }
+.ai-markdown-output ul { list-style-type: disc; padding-left: 1.4rem; margin-bottom: 0.75rem; color: #3f3f46; }
+.ai-markdown-output ol { list-style-type: decimal; padding-left: 1.4rem; margin-bottom: 0.75rem; color: #3f3f46; }
+.ai-markdown-output li { margin-bottom: 0.3rem; line-height: 1.55; font-size: 0.875rem; }
+.ai-markdown-output li::marker { color: #818cf8; }
+.ai-markdown-output strong { font-weight: 700; color: #18181b; }
+.ai-markdown-output hr { border: none; border-top: 1px solid #e4e4e7; margin: 1.25rem 0; }
+.ai-markdown-output code { background: #f4f4f5; padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.82em; }
+
+/* Dashboard layout */
+.dashboard-body { min-width: unset; min-height: unset; }
+
+/* Line clamp utility */
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }

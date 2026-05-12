@@ -5,14 +5,14 @@ import { useAppStore } from "@/store/appStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { sanitizeText, extractRelevantResumeContext, renderMarkdown } from "@/lib/utils";
 import { generateEmailGuesses, type EmailGuess } from "@/lib/emailGuesser";
-import { 
+import {
   Briefcase, FileText, Send, Sparkles, Settings,
   CheckCircle2, AlertCircle, Copy, FileUp, X, Mail, Upload, Link,
   Building, GraduationCap, Zap, ArrowRight, Clock, Trash2,
-  Plus, User, ChevronDown, Wand2, Download, ListTodo
+  Plus, User, ChevronDown, Wand2, Download, ListTodo, LayoutDashboard
 } from "lucide-react";
 
-type GenerationType = "referral" | "linkedin" | "cover_letter" | "custom_cv" | "cold_mail" | "match_analyzer";
+type GenerationType = "referral" | "linkedin" | "cover_letter" | "custom_cv" | "cold_mail" | "match_analyzer" | "interview_prep" | "thank_you";
 
 const GENERATION_LABELS: Record<GenerationType, string> = {
   referral: "Referral Request",
@@ -21,6 +21,8 @@ const GENERATION_LABELS: Record<GenerationType, string> = {
   custom_cv: "Custom CV",
   cold_mail: "Cold Email",
   match_analyzer: "Match Analyzer",
+  interview_prep: "Interview Prep",
+  thank_you: "Thank You Note",
 };
 
 export default function ClientPage() {
@@ -289,13 +291,22 @@ Subject: [Your Subject Here]
 Start with a direct hook, provide the value proposition, and end with a low-friction call to action (e.g., asking for a referral or a brief chat).
 Do not be overly formal or use cliché buzzwords. Write like a confident, competent professional.${lpuContext}`,
       
-      match_analyzer: `You are an expert ATS (Applicant Tracking System) algorithm. Evaluate the candidate's resume against the target job description. Output a highly structured, ATS Match Analysis in Markdown format. 
+      match_analyzer: `You are an expert ATS (Applicant Tracking System) algorithm. Evaluate the candidate's resume against the target job description. Output a highly structured, ATS Match Analysis in Markdown format.
 
 CRITICAL INSTRUCTIONS:
 1. Start with a prominent Match Score out of 100 (e.g., **Match Score: 85/100**).
 2. List 'Matched Skills': The strengths that align with the job description.
 3. List 'Missing/Weak Skills': What the candidate lacks based on the job description.
 4. Conclude with 'Actionable Advice': 2-3 specific suggestions on what the candidate should highlight in an interview or quickly upskill on.`,
+
+      interview_prep: `You are an expert interview coach. Based on the job description and the candidate's resume, generate:
+1. **Top 8 Interview Questions** likely to be asked (mix behavioral, technical, situational)
+2. For each question, provide a **Model Answer** using the STAR method where applicable, tailored to the candidate's actual experience from their resume.
+Format in clear Markdown with ## headers for each question. Be specific and realistic.`,
+
+      thank_you: `You are writing a professional, warm post-interview thank you email.
+Keep it under 120 words. Include Subject: [line].
+Express genuine enthusiasm for the role and company. Reiterate one key strength relevant to the job. End with looking forward to next steps.`,
     };
 
     const systemPrompt = systemPrompts[generationType];
@@ -743,7 +754,16 @@ The JSON must have these exact keys, using empty strings if not found:
               <span className="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{store.history.length}</span>
             )}
           </button>
-          <button 
+          <a
+            href="/dashboard"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 bg-white text-zinc-600 border border-zinc-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 shadow-sm"
+          >
+            <LayoutDashboard size={18} />
+            <span className="text-sm font-bold hidden sm:inline">Dashboard</span>
+          </a>
+          <button
             onClick={() => setShowSettings(!showSettings)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${showSettings ? 'bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-200' : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 shadow-sm'}`}
           >
