@@ -3,12 +3,21 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
-console.log("1. Building Next.js app...");
-execSync('npm run build', { stdio: 'inherit' });
+// Cross-platform env var prefix
+const envPrefix = process.platform === 'win32' ? 'set BUILD_STATIC=1 &&' : 'BUILD_STATIC=1';
+
+console.log("1. Building Next.js app (static export for extension)...");
+execSync(`${envPrefix} npm run build`, { stdio: 'inherit', shell: true });
+
+const outDir = path.join(__dirname, 'out');
+
+if (!fs.existsSync(outDir)) {
+  console.error("ERROR: 'out/' directory not found. Make sure next.config.js has output: 'export' when BUILD_STATIC=1.");
+  process.exit(1);
+}
 
 console.log("\n2. Fixing paths in out/ directory for Chrome Extension compatibility...");
 
-const outDir = path.join(__dirname, 'out');
 const nextDir = path.join(outDir, '_next');
 const assetsDir = path.join(outDir, 'assets');
 
@@ -41,12 +50,11 @@ function processDirectory(dir) {
       processDirectory(fullPath);
     } else if (fullPath.endsWith('.html') || fullPath.endsWith('.css') || fullPath.endsWith('.js') || fullPath.endsWith('.json')) {
       let content = fs.readFileSync(fullPath, 'utf8');
-      
+
       // Update Next.js paths to use the new assets folder with ABSOLUTE extension paths (/)
-      // This prevents the Turbopack InvariantError that expects './assets' literal strings.
       content = content.replace(/\/_next\//g, '/assets/');
       content = content.replace(/_next\//g, 'assets/');
-      
+
       // General path fixing for Chrome Extensions
       content = content.replace(/href="\/favicon/g, 'href="/favicon');
       content = content.replace(/'\/pdf\.worker\.min\.mjs'/g, "'/pdf.worker.min.mjs'");
@@ -55,12 +63,11 @@ function processDirectory(dir) {
       // EXTRACT INLINE SCRIPTS (Fix for Chrome Extension Manifest V3 CSP)
       if (fullPath.endsWith('.html')) {
         const inlineScripts = [];
-        // Match <script>...</script> but ignore those with a src attribute
         const scriptRegex = /<script(?![^>]*src=)[^>]*>(.*?)<\/script>/gis;
-        
+
         content = content.replace(scriptRegex, (match, scriptContent) => {
           inlineScripts.push(scriptContent);
-          return ''; // Remove the inline script from the HTML
+          return '';
         });
 
         if (inlineScripts.length > 0) {
@@ -68,8 +75,7 @@ function processDirectory(dir) {
           const scriptFileName = `inline-scripts-${path.basename(fullPath, '.html')}.js`;
           const scriptPath = path.join(dir, scriptFileName);
           fs.writeFileSync(scriptPath, combinedScript);
-          
-          // Inject the externalized script right before </body>, or at the end if no </body>
+
           const scriptTag = `<script src="/${scriptFileName}"></script>`;
           if (content.includes('</body>')) {
             content = content.replace('</body>', `${scriptTag}</body>`);
@@ -78,7 +84,7 @@ function processDirectory(dir) {
           }
         }
       }
-      
+
       fs.writeFileSync(fullPath, content);
     }
   }
@@ -87,13 +93,11 @@ processDirectory('./out');
 
 console.log("\n3. Handling hot-reload for environments...");
 if (process.env.NODE_ENV === 'production') {
-  // Remove hot-reload.js in production to save space and keep it clean
   const hotReloadPath = path.join(__dirname, 'out', 'hot-reload.js');
   if (fs.existsSync(hotReloadPath)) {
     fs.unlinkSync(hotReloadPath);
   }
-  
-  // Optionally remove it from manifest.json
+
   const manifestPath = path.join(__dirname, 'out', 'manifest.json');
   if (fs.existsSync(manifestPath)) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -111,8 +115,9 @@ const output = fs.createWriteStream('extension.zip');
 const archive = archiver('zip', { zlib: { level: 9 } });
 
 output.on('close', function() {
-  console.log(`\n✅ Success! The Chrome Extension is ready: extension.zip (${archive.pointer()} bytes)`);
-  console.log("Upload 'extension.zip' or the 'out' directory to the Chrome Web Store to publish.");
+  console.log(`\n✅ Extension ready: extension.zip (${archive.pointer()} bytes)`);
+  console.log("Load the 'out/' directory in Chrome via chrome://extensions > Load unpacked");
+  console.log("Or upload 'extension.zip' to the Chrome Web Store.");
 });
 
 archive.on('error', function(err) {

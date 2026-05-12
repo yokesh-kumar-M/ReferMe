@@ -80,7 +80,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Briefcase size={16} className="text-white" />
             </div>
             <div>
-              <p className="text-sm font-black text-white leading-none">JobRight</p>
+              <p className="text-sm font-black text-white leading-none">ReferMe</p>
               <p className="text-[10px] text-zinc-500 mt-0.5">Personal Dashboard</p>
             </div>
           </div>
@@ -120,7 +120,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button onClick={() => setMobileOpen(true)} className="text-zinc-400 hover:text-white">
             <Menu size={20} />
           </button>
-          <p className="text-sm font-black text-white">JobRight</p>
+          <p className="text-sm font-black text-white">ReferMe</p>
         </div>
 
         {/* Page content */}

@@ -123,15 +123,26 @@
   // ─── Smart Form Autofill ────────────────────────────────────────
   function smartSetValue(input, value) {
     if (!value || !input) return;
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-      || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-    if (nativeInputValueSetter) {
-      nativeInputValueSetter.call(input, value);
+    // Use native setter to bypass React's synthetic event system
+    const proto = input.tagName === 'TEXTAREA'
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
+    const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    if (nativeSetter) {
+      nativeSetter.call(input, value);
     } else {
       input.value = value;
     }
-    ['input', 'change', 'blur', 'keyup'].forEach(evt => input.dispatchEvent(new Event(evt, { bubbles: true })));
-    input.style.transition = 'background-color 0.3s';
+    // Fire all events React and other frameworks listen to
+    ['input', 'change', 'blur', 'keyup', 'keydown'].forEach(evt =>
+      input.dispatchEvent(new Event(evt, { bubbles: true, cancelable: true }))
+    );
+    // Also fire a React-specific synthetic input event
+    try {
+      const reactInputEvent = new InputEvent('input', { bubbles: true, cancelable: true, data: value });
+      input.dispatchEvent(reactInputEvent);
+    } catch { /* ignore */ }
+    input.style.transition = 'background-color 0.4s';
     input.style.backgroundColor = '#e0e7ff';
     setTimeout(() => { input.style.backgroundColor = ''; }, 1500);
   }
@@ -198,6 +209,51 @@
     });
 
     showToast(`✓ Autofilled ${filled} field${filled !== 1 ? 's' : ''}`);
+
+    // Detect remaining unfilled labeled fields and ask the user once
+    setTimeout(() => detectUnknownFields(), 600);
+  }
+
+  async function detectUnknownFields() {
+    // Get previously answered custom fields from storage
+    const stored = await chrome.storage.local.get(['referme-custom-fields']);
+    const customFields = stored['referme-custom-fields'] || {};
+
+    const unknownFields = [];
+    const allInputs = document.querySelectorAll(
+      'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]), textarea'
+    );
+
+    allInputs.forEach(input => {
+      if (input.value && input.value.trim()) return; // Already filled
+      const ident = getFieldIdentifier(input);
+      if (!ident.trim()) return; // No label = skip
+
+      const knownPatterns = [
+        'first name', 'last name', 'email', 'phone', 'linkedin', 'github',
+        'website', 'city', 'state', 'country', 'address', 'zip', 'postal',
+        'salary', 'cover letter', 'summary', 'years', 'experience', 'authorized',
+        'fullname', 'full name', 'fname', 'lname', 'firstname', 'lastname',
+      ];
+      const isKnown = knownPatterns.some(p => ident.includes(p));
+      if (isKnown) return;
+
+      // If we have a saved answer, fill it automatically
+      const savedAnswer = customFields[ident.trim().slice(0, 80)];
+      if (savedAnswer) {
+        smartSetValue(input, savedAnswer);
+        return;
+      }
+
+      const labelText = (input.labels?.[0]?.innerText || document.querySelector(`label[for="${input.id}"]`)?.innerText || ident).trim();
+      if (labelText && labelText.length > 3 && labelText.length < 150) {
+        unknownFields.push({ label: labelText.slice(0, 100), id: input.id || ident.slice(0, 40) });
+      }
+    });
+
+    if (unknownFields.length > 0 && agentIframe?.contentWindow) {
+      agentIframe.contentWindow.postMessage({ type: 'REFERME_UNKNOWN_FIELDS', fields: unknownFields.slice(0, 8) }, '*');
+    }
   }
 
   // ─── Toast Notification ─────────────────────────────────────────
@@ -368,7 +424,7 @@
 
     agentIframe = document.createElement('iframe');
     agentIframe.id = 'referme-agent-iframe';
-    agentIframe.src = chrome.runtime.getURL('index.html');
+    agentIframe.src = chrome.runtime.getURL('popup/index.html');
     agentIframe.allow = 'clipboard-write';
 
     agentContainer.appendChild(agentIframe);
@@ -429,6 +485,26 @@
     }
     if (event.data.type === 'REFERME_CLOSE') {
       toggleAgent(false);
+    }
+    if (event.data.type === 'REFERME_CUSTOM_FIELDS') {
+      const answers = event.data.answers || {};
+      // Save answers to storage for future autofill
+      chrome.storage.local.get(['referme-custom-fields'], ({ 'referme-custom-fields': existing = {} }) => {
+        const merged = { ...existing, ...answers };
+        chrome.storage.local.set({ 'referme-custom-fields': merged });
+      });
+      // Fill the fields now
+      const allInputs = document.querySelectorAll(
+        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea'
+      );
+      allInputs.forEach(input => {
+        const ident = getFieldIdentifier(input);
+        const answer = answers[input.id] || answers[ident.trim().slice(0, 40)];
+        if (answer && (!input.value || !input.value.trim())) {
+          smartSetValue(input, answer);
+        }
+      });
+      showToast(`✓ Saved ${Object.keys(answers).length} custom answer${Object.keys(answers).length !== 1 ? 's' : ''}`);
     }
   });
 

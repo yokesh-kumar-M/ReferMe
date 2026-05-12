@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Personal AI Agent to detect job applications, extract context, and generate personalized referrals.",
   "action": {
-    "default_popup": "index.html",
+    "default_popup": "popup/index.html",
     "default_title": "Open ReferMe Agent",
     "default_icon": {
       "16": "icon16.png",
@@ -36,9 +36,16 @@
       "css": ["content.css"]
     }
   ],
+  "externally_connectable": {
+    "matches": [
+      "https://referme.vercel.app/*",
+      "http://localhost:3000/*",
+      "http://localhost:3001/*"
+    ]
+  },
   "web_accessible_resources": [
     {
-      "resources": ["index.html", "*"],
+      "resources": ["popup/index.html", "popup/*", "index.html", "*"],
       "matches": ["*://*/*"]
     }
   ]

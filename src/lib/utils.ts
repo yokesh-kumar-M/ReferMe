@@ -125,7 +125,7 @@ export function renderMarkdown(text: string): string {
   let listType: 'ul' | 'ol' | null = null;
   
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
+    const line = lines[i];
     
     // Close list if current line is not a list item
     const isBullet = /^\s*[-*•]\s+/.test(line);

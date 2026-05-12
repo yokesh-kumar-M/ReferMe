@@ -12,6 +12,7 @@ import {
   Plus, User, ChevronDown, Wand2, Download, ListTodo, LayoutDashboard
 } from "lucide-react";
 
+
 type GenerationType = "referral" | "linkedin" | "cover_letter" | "custom_cv" | "cold_mail" | "match_analyzer" | "interview_prep" | "thank_you";
 
 const GENERATION_LABELS: Record<GenerationType, string> = {
@@ -55,6 +56,12 @@ export default function ClientPage() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
   const [showNewProfileInput, setShowNewProfileInput] = useState(false);
+  // Job detected banner (from content script)
+  const [jobDetected, setJobDetected] = useState(false);
+  // Unknown form fields needing answers
+  const [unknownFields, setUnknownFields] = useState<{ label: string; id: string }[]>([]);
+  const [unknownAnswers, setUnknownAnswers] = useState<Record<string, string>>({});
+  const [showUnknownFields, setShowUnknownFields] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -67,7 +74,15 @@ export default function ClientPage() {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "REFERME_JOB_DATA") {
         if (event.data.jobTitle) setJobTitle(event.data.jobTitle);
-        if (event.data.jobDescription) setJobDescription(event.data.jobDescription);
+        if (event.data.jobDescription) {
+          setJobDescription(event.data.jobDescription);
+          setGenerationType("cover_letter");
+          setJobDetected(true);
+        }
+      }
+      if (event.data?.type === "REFERME_UNKNOWN_FIELDS") {
+        setUnknownFields(event.data.fields || []);
+        setShowUnknownFields(true);
       }
     };
     
@@ -351,18 +366,7 @@ Express genuine enthusiasm for the role and company. Reiterate one key strength 
       return;
     }
 
-    // Save to history after generation completes
-    // We read result from the latest state via a micro-delay
-    setTimeout(() => {
-      const currentResult = document.querySelector('.whitespace-pre-wrap, .markdown-output')?.textContent;
-      if (currentResult) {
-        store.addHistoryEntry({
-          type: generationType,
-          jobTitle: jobTitle || 'Untitled',
-          result: currentResult,
-        });
-      }
-    }, 500);
+    // History is saved inside tryGenerateWithGroq / tryGenerateWithGemini after stream ends
   };
 
   const tryGenerateWithGroq = async (systemPrompt: string, userPrompt: string) => {
@@ -393,13 +397,13 @@ Express genuine enthusiasm for the role and company. Reiterate one key strength 
     
     const decoder = new TextDecoder();
     let currentText = "";
-    
+
     setLoading(false);
 
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      
+
       const chunk = decoder.decode(value, { stream: true });
       const lines = chunk.split('\n');
       for (const line of lines) {
@@ -416,6 +420,10 @@ Express genuine enthusiasm for the role and company. Reiterate one key strength 
           }
         }
       }
+    }
+
+    if (currentText) {
+      store.addHistoryEntry({ type: generationType, jobTitle: jobTitle || 'Untitled', result: currentText });
     }
   };
 
@@ -475,6 +483,10 @@ Express genuine enthusiasm for the role and company. Reiterate one key strength 
         const lastIndex = (lastMatch.index || 0) + lastMatch[0].length;
         buffer = buffer.slice(lastIndex);
       }
+    }
+
+    if (currentText) {
+      store.addHistoryEntry({ type: generationType, jobTitle: jobTitle || 'Untitled', result: currentText });
     }
   };
 
@@ -925,6 +937,95 @@ The JSON must have these exact keys, using empty strings if not found:
                     ))}
                   </div>
                 )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Job Detected Quick-Action Banner */}
+        <AnimatePresence>
+          {jobDetected && jobDescription && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="mb-6 bg-gradient-to-r from-indigo-500/10 to-violet-500/10 border border-indigo-500/25 rounded-2xl p-4 relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-transparent pointer-events-none" />
+              <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <Zap size={14} className="text-indigo-400" />
+                    <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">Job Detected</span>
+                  </div>
+                  <p className="text-sm font-semibold text-zinc-200 truncate">{jobTitle || "Job page loaded"}</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => { setGenerationType("cover_letter"); generateContent(); }}
+                    disabled={loading || !store.getActiveResume()}
+                    className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
+                  >
+                    <Sparkles size={13} /> Cover Letter
+                  </button>
+                  <button
+                    onClick={autoFillApplication}
+                    disabled={isAutofilling || !store.getActiveResume()}
+                    className="flex items-center gap-1.5 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                  >
+                    <Wand2 size={13} /> {isAutofilling ? "Filling..." : "Autofill Form"}
+                  </button>
+                </div>
+                <button onClick={() => setJobDetected(false)} className="text-zinc-500 hover:text-zinc-300 p-0.5">
+                  <X size={14} />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Unknown Fields Panel */}
+        <AnimatePresence>
+          {showUnknownFields && unknownFields.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mb-6 overflow-hidden"
+            >
+              <div className="bg-amber-500/10 border border-amber-500/25 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle size={16} className="text-amber-400" />
+                    <span className="text-sm font-bold text-amber-300">New Form Questions — Answer Once</span>
+                  </div>
+                  <button onClick={() => setShowUnknownFields(false)} className="text-zinc-500 hover:text-zinc-300">
+                    <X size={14} />
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-400 mb-4">These questions weren't in your profile. Answer them to save for future autofill.</p>
+                <div className="space-y-3">
+                  {unknownFields.map(f => (
+                    <div key={f.id}>
+                      <label className="block text-xs font-semibold text-zinc-400 mb-1">{f.label}</label>
+                      <input
+                        value={unknownAnswers[f.id] || ""}
+                        onChange={e => setUnknownAnswers(prev => ({ ...prev, [f.id]: e.target.value }))}
+                        placeholder="Your answer..."
+                        className="w-full px-3 py-2 text-sm rounded-xl border border-zinc-700 bg-zinc-800 text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-amber-500/50"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => {
+                    window.parent.postMessage({ type: "REFERME_CUSTOM_FIELDS", answers: unknownAnswers }, "*");
+                    setShowUnknownFields(false);
+                  }}
+                  className="mt-4 flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-900 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                >
+                  <CheckCircle2 size={13} /> Save & Fill These Fields
+                </button>
               </div>
             </motion.div>
           )}
