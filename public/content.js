@@ -424,7 +424,7 @@
 
     agentIframe = document.createElement('iframe');
     agentIframe.id = 'referme-agent-iframe';
-    agentIframe.src = chrome.runtime.getURL('popup.html');
+    agentIframe.src = chrome.runtime.getURL('popup/index.html');
     agentIframe.allow = 'clipboard-write';
 
     agentContainer.appendChild(agentIframe);

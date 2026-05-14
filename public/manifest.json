@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "ReferMe Agent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Personal AI Agent to detect job applications, extract context, and generate personalized referrals.",
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "popup/index.html",
     "default_title": "Open ReferMe Agent",
     "default_icon": {
       "16": "icon16.png",
@@ -45,7 +45,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["popup.html", "index.html", "*"],
+      "resources": ["popup/index.html", "dashboard/index.html", "index.html", "*"],
       "matches": ["*://*/*"]
     }
   ]

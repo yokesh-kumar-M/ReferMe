@@ -48,8 +48,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const normalize = (p: string) => p.replace(/\/$/, "") || "/";
+  const cleanPath = normalize(pathname);
   const isActive = (href: string) =>
-    href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
+    href === "/dashboard" ? cleanPath === "/dashboard" : cleanPath.startsWith(href);
 
   return (
     <div className="flex h-screen bg-zinc-50 overflow-hidden">

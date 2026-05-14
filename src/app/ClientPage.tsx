@@ -766,15 +766,21 @@ The JSON must have these exact keys, using empty strings if not found:
               <span className="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{store.history.length}</span>
             )}
           </button>
-          <a
-            href="/dashboard"
-            target="_blank"
-            rel="noreferrer"
+          <button
+            onClick={() => {
+              const inExt = typeof chrome !== "undefined" && !!chrome.runtime?.getURL;
+              const url = inExt ? chrome.runtime.getURL("dashboard/index.html") : "/dashboard/";
+              if (inExt && chrome.tabs?.create) {
+                chrome.tabs.create({ url });
+              } else {
+                window.open(url, "_blank", "noreferrer");
+              }
+            }}
             className="flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 bg-white text-zinc-600 border border-zinc-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 shadow-sm"
           >
             <LayoutDashboard size={18} />
             <span className="text-sm font-bold hidden sm:inline">Dashboard</span>
-          </a>
+          </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${showSettings ? 'bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-200' : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 shadow-sm'}`}
