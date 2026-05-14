@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAppStore } from "@/store/appStore";
 import { useDashboardStore } from "@/store/dashboardStore";
 import {
-  Settings, Key, Database, Download, Upload, Trash2,
-  CheckCircle2, Eye, EyeOff, Shield, Zap, AlertTriangle, Copy, X
+  Key, Database, Download, Upload, Trash2,
+  CheckCircle2, Eye, EyeOff, Shield, AlertTriangle
 } from "lucide-react";
 
 function ApiKeyField({ label, value, onChange, placeholder, hint }: {
@@ -56,7 +56,6 @@ export default function SettingsPage() {
   const { groqApiKey, setGroqApiKey, geminiApiKey, setGeminiApiKey, resumeProfiles, clearHistory, history } = useAppStore();
   const { applications, contacts } = useDashboardStore();
   const [mounted, setMounted] = useState(false);
-  const [showExport, setShowExport] = useState(false);
   const [anthropicKey, setAnthropicKey] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -100,11 +99,32 @@ export default function SettingsPage() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target?.result as string);
-        if (data.applications) {
-          const { useDashboardStore: ds } = require("@/store/dashboardStore");
-          // basic import — reset and re-add
-          alert(`Import found ${data.applications.length} applications and ${data.contacts?.length || 0} contacts. Import feature will be fully implemented soon.`);
+        if (!data || typeof data !== "object") throw new Error("Invalid file shape");
+
+        const dsRaw = localStorage.getItem("jobright-dashboard");
+        const ds = dsRaw ? JSON.parse(dsRaw) : { state: { applications: [], contacts: [] }, version: 0 };
+        ds.state = ds.state || {};
+
+        if (Array.isArray(data.applications)) {
+          const existing = new Set((ds.state.applications || []).map((a: { id: string }) => a.id));
+          ds.state.applications = [
+            ...(ds.state.applications || []),
+            ...data.applications.filter((a: { id: string }) => !existing.has(a.id)),
+          ];
         }
+        if (Array.isArray(data.contacts)) {
+          const existing = new Set((ds.state.contacts || []).map((c: { id: string }) => c.id));
+          ds.state.contacts = [
+            ...(ds.state.contacts || []),
+            ...data.contacts.filter((c: { id: string }) => !existing.has(c.id)),
+          ];
+        }
+        localStorage.setItem("jobright-dashboard", JSON.stringify(ds));
+
+        const appsCount = Array.isArray(data.applications) ? data.applications.length : 0;
+        const contactsCount = Array.isArray(data.contacts) ? data.contacts.length : 0;
+        alert(`Imported ${appsCount} application(s) and ${contactsCount} contact(s). Reloading...`);
+        window.location.reload();
       } catch {
         alert("Invalid backup file.");
       }

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { obfuscateKey, deobfuscateKey } from '@/lib/utils';
-import { DEFAULT_RESUME } from '@/lib/yokesh_resume';
+import { DEFAULT_RESUME } from '@/lib/defaultResume';
 
 // --- Types ---
 

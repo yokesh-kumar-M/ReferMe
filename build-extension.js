@@ -3,11 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
-// Cross-platform env var prefix
-const envPrefix = process.platform === 'win32' ? 'set BUILD_STATIC=1 &&' : 'BUILD_STATIC=1';
-
 console.log("1. Building Next.js app (static export for extension)...");
-execSync(`${envPrefix} npm run build`, { stdio: 'inherit', shell: true });
+execSync('npm run build', {
+  stdio: 'inherit',
+  shell: true,
+  env: { ...process.env, BUILD_STATIC: '1' },
+});
 
 const outDir = path.join(__dirname, 'out');
 
@@ -27,19 +28,43 @@ if (fs.existsSync(nextDir)) {
   console.log("Renamed _next directory to assets.");
 }
 
-// Remove any file or directory starting with "_" because Chrome extensions do not allow files starting with "_"
-const outFiles = fs.readdirSync(outDir);
-for (const file of outFiles) {
-  if (file.startsWith('_') && file !== 'assets') {
-    const fullPath = path.join(outDir, file);
-    if (fs.statSync(fullPath).isDirectory()) {
+// Chrome extensions reject files starting with "_" anywhere in the package.
+// Walk the entire tree and remove them, plus the Next.js .txt metadata files
+// that ship alongside every HTML page (they aren't needed at runtime and
+// often contain "_"-prefixed segments).
+function cleanReservedFiles(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir)) {
+    const fullPath = path.join(dir, entry);
+    const isDir = fs.statSync(fullPath).isDirectory();
+
+    // Skip the renamed assets directory; everything inside is safe.
+    if (entry === 'assets' && dir === outDir) continue;
+
+    if (entry.startsWith('_')) {
       fs.rmSync(fullPath, { recursive: true, force: true });
-    } else {
-      fs.unlinkSync(fullPath);
+      console.log(`Removed reserved file: ${path.relative(outDir, fullPath)}`);
+      continue;
     }
-    console.log(`Removed reserved system file: ${file}`);
+
+    // Drop the Next.js RSC payload .txt files — Chrome flags them and
+    // they contain stale references to /_next/ paths anyway.
+    if (!isDir && entry.endsWith('.txt')) {
+      fs.unlinkSync(fullPath);
+      continue;
+    }
+
+    if (isDir) {
+      cleanReservedFiles(fullPath);
+      // Drop any directory left empty after cleanup (e.g. /popup which only
+      // contained Next.js _-prefixed metadata files).
+      try {
+        if (fs.readdirSync(fullPath).length === 0) fs.rmdirSync(fullPath);
+      } catch { /* ignore */ }
+    }
   }
 }
+cleanReservedFiles(outDir);
 
 function processDirectory(dir) {
   if (!fs.existsSync(dir)) return;

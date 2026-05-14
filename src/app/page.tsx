@@ -53,17 +53,25 @@ const FEATURES = [
   },
 ];
 
+const INSTALL_STEPS = [
+  { n: "01", label: "Download", desc: "Get extension.zip from the GitHub Releases page — link in the button above." },
+  { n: "02", label: "Unzip", desc: "Extract the zip. You'll get a folder with all the extension files inside." },
+  { n: "03", label: "Open Extensions", desc: "In Chrome, navigate to chrome://extensions in the address bar." },
+  { n: "04", label: "Developer Mode", desc: "Toggle Developer mode on using the switch in the top-right corner." },
+  { n: "05", label: "Load Unpacked", desc: "Click Load unpacked and select the folder you extracted in step 2." },
+];
+
 const HOW_IT_WORKS = [
   {
     step: "01",
-    title: "Install the Extension",
-    desc: "Add ReferMe Agent to Chrome. It takes 30 seconds.",
+    title: "Download & Load",
+    desc: "Download extension.zip from GitHub Releases. Unzip it, go to chrome://extensions, enable Developer mode, and click Load unpacked → select the folder.",
     color: "from-indigo-500 to-violet-500",
   },
   {
     step: "02",
-    title: "Upload Your Resume",
-    desc: "Paste your resume or upload a PDF in the extension or dashboard. Add your Groq/Gemini API key.",
+    title: "Add Resume & API Key",
+    desc: "Open the extension popup or Dashboard → Settings. Paste your resume text or upload a PDF, then add a free Groq or Gemini API key to unlock AI features.",
     color: "from-violet-500 to-purple-500",
   },
   {
@@ -81,6 +89,10 @@ const HOW_IT_WORKS = [
 ];
 
 const FAQ = [
+  {
+    q: "How do I install it? Is it on the Chrome Web Store?",
+    a: "Not yet — install directly from GitHub. Download extension.zip from the Releases page, unzip it, open chrome://extensions in Chrome, enable Developer mode (top-right toggle), then click Load unpacked and select the unzipped folder. Done.",
+  },
   {
     q: "Is this free?",
     a: "Yes, 100% free and open-source. You only need a free Groq API key (or Gemini) for AI features.",
@@ -225,6 +237,24 @@ export default function LandingPage() {
           ))}
         </motion.div>
       </main>
+
+      {/* Install Guide */}
+      <section className="relative z-10 max-w-5xl mx-auto px-6 pb-12">
+        <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl px-8 py-7">
+          <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-5">
+            Not on the Chrome Web Store — load it yourself in 60 seconds
+          </p>
+          <ol className="grid grid-cols-1 sm:grid-cols-5 gap-5">
+            {INSTALL_STEPS.map(({ n, label, desc }) => (
+              <li key={n} className="flex flex-col gap-1.5">
+                <span className="text-indigo-400 font-black text-xl leading-none">{n}</span>
+                <span className="font-bold text-zinc-200 text-xs">{label}</span>
+                <span className="text-zinc-500 text-xs leading-relaxed">{desc}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
 
       {/* Platforms strip */}
       <div className="relative z-10 border-y border-zinc-800/60 py-5 bg-zinc-900/30 overflow-hidden">

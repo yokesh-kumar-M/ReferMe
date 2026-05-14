@@ -32,7 +32,30 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "ReferMe ${{ github.ref_name }}"
+          make_latest: true
           generate_release_notes: true
+          body: |
+            ## Install the Extension
+
+            > **Note:** ReferMe is not on the Chrome Web Store — load it directly using Chrome's Developer mode.
+
+            1. Download **`extension.zip`** from the Assets section below.
+            2. Unzip the file — you'll get a folder containing all extension files.
+            3. Open Chrome and go to **`chrome://extensions`**.
+            4. Toggle **Developer mode** on (switch in the top-right corner).
+            5. Click **Load unpacked** and select the unzipped folder.
+            6. Pin ReferMe from the Chrome Extensions toolbar (🧩) and click it to open the popup.
+
+            ## Add Your AI Key
+
+            ReferMe uses your own API key — no subscription required.
+
+            - **Groq (recommended, free):** Get a key at [console.groq.com](https://console.groq.com) — uses `llama-3.3-70b-versatile`.
+            - **Gemini (fallback, free):** Get a key at [aistudio.google.com](https://aistudio.google.com) — uses `gemini-2.0-flash`.
+
+            Paste your key in the extension popup or in the Dashboard → Settings page.
+
+            ---
           files: extension.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

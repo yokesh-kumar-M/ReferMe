@@ -6,9 +6,9 @@ import { useAppStore } from "@/store/appStore";
 import { useDashboardStore } from "@/store/dashboardStore";
 import { sanitizeText } from "@/lib/utils";
 import {
-  FileText, Upload, Sparkles, Target, CheckCircle2, AlertCircle,
-  X, Download, Plus, Wand2, ChevronDown, RefreshCw, Info,
-  TrendingUp, BookOpen, Zap, Copy
+  FileText, Upload, Target, CheckCircle2, AlertCircle,
+  X, Plus, ChevronDown, RefreshCw, Info,
+  BookOpen, Zap, Copy
 } from "lucide-react";
 
 interface ATSResult {
