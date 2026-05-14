@@ -4,6 +4,14 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
 
 jobs:
   release:
@@ -31,7 +39,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "ReferMe ${{ github.ref_name }}"
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: "ReferMe ${{ github.event.inputs.tag || github.ref_name }}"
           make_latest: true
           generate_release_notes: true
           body: |
