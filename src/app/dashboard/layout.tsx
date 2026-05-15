@@ -6,32 +6,37 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Kanban, FileText, Sparkles, Users,
-  BarChart3, Settings, Menu, X, Zap, ChevronRight,
-  ExternalLink, Briefcase
+  BarChart3, Settings, Menu, X, Zap, ExternalLink, Briefcase,
 } from "lucide-react";
+
+import { OnboardingWizard } from "@/features/onboarding/OnboardingWizard";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/tracker", label: "Job Tracker", icon: Kanban },
   { href: "/dashboard/resume", label: "ATS Optimizer", icon: FileText },
   { href: "/dashboard/ai", label: "AI Toolkit", icon: Sparkles },
-  { href: "/dashboard/contacts", label: "Contacts", icon: Users },
+  { href: "/dashboard/network", label: "Network", icon: Users },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
-function NavItem({ href, label, icon: Icon, active, onClick }: {
+function NavItem({
+  href, label, icon: Icon, active, onClick,
+}: {
   href: string; label: string; icon: React.ElementType; active: boolean; onClick?: () => void;
 }) {
   return (
     <Link href={href} onClick={onClick}>
-      <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 group relative
-        ${active
-          ? "bg-indigo-500/20 text-indigo-300 shadow-sm"
-          : "text-zinc-400 hover:text-zinc-100 hover:bg-white/5"
-        }`}
+      <div
+        className={
+          "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 group relative " +
+          (active
+            ? "bg-indigo-500/20 text-indigo-300 shadow-sm"
+            : "text-zinc-400 hover:text-zinc-100 hover:bg-white/5")
+        }
       >
-        <Icon size={18} className={`shrink-0 transition-colors ${active ? "text-indigo-400" : "group-hover:text-zinc-200"}`} />
+        <Icon size={18} className={"shrink-0 transition-colors " + (active ? "text-indigo-400" : "group-hover:text-zinc-200")} />
         <span>{label}</span>
         {active && (
           <motion.div
@@ -55,7 +60,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen bg-zinc-50 overflow-hidden">
-      {/* Mobile overlay */}
+      <OnboardingWizard />
+
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
@@ -68,14 +74,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
-      <aside className={`
-        fixed lg:relative inset-y-0 left-0 z-50 w-64 flex flex-col
-        bg-zinc-900 border-r border-zinc-800
-        transition-transform duration-300 lg:translate-x-0
-        ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
-      `}>
-        {/* Logo */}
+      <aside
+        className={
+          "fixed lg:relative inset-y-0 left-0 z-50 w-64 flex flex-col bg-zinc-900 border-r border-zinc-800 transition-transform duration-300 lg:translate-x-0 " +
+          (mobileOpen ? "translate-x-0" : "-translate-x-full")
+        }
+      >
         <div className="flex items-center justify-between px-5 py-5 border-b border-zinc-800">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-gradient-to-tr from-indigo-500 to-violet-500 rounded-lg flex items-center justify-center shadow-lg">
@@ -83,7 +87,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div>
               <p className="text-sm font-black text-white leading-none">ReferMe</p>
-              <p className="text-[10px] text-zinc-500 mt-0.5">Personal Dashboard</p>
+              <p className="text-[10px] text-zinc-500 mt-0.5">Dashboard</p>
             </div>
           </div>
           <button className="lg:hidden text-zinc-500 hover:text-zinc-300" onClick={() => setMobileOpen(false)}>
@@ -91,44 +95,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {NAV.map((item) => (
-            <NavItem
-              key={item.href}
-              {...item}
-              active={isActive(item.href)}
-              onClick={() => setMobileOpen(false)}
-            />
+            <NavItem key={item.href} {...item} active={isActive(item.href)} onClick={() => setMobileOpen(false)} />
           ))}
         </nav>
 
-        {/* Extension link */}
         <div className="px-3 py-4 border-t border-zinc-800">
-          <Link href="/" target="_blank">
-            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-all group">
-              <Zap size={16} className="text-violet-500 shrink-0" />
-              <span>Open Extension</span>
-              <ExternalLink size={12} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-          </Link>
+          <a
+            href="https://github.com/yokesh-kumar-M/ReferMe/releases/latest"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-all group"
+          >
+            <Zap size={16} className="text-violet-500 shrink-0" />
+            <span>Install extension</span>
+            <ExternalLink size={12} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+          </a>
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile topbar */}
         <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-zinc-900 border-b border-zinc-800">
           <button onClick={() => setMobileOpen(true)} className="text-zinc-400 hover:text-white">
             <Menu size={20} />
           </button>
           <p className="text-sm font-black text-white">ReferMe</p>
         </div>
-
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto bg-zinc-50">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto bg-zinc-50">{children}</main>
       </div>
     </div>
   );

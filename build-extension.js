@@ -116,22 +116,11 @@ function processDirectory(dir) {
 }
 processDirectory('./out');
 
-console.log("\n3. Handling hot-reload for environments...");
-if (process.env.NODE_ENV === 'production') {
-  const hotReloadPath = path.join(__dirname, 'out', 'hot-reload.js');
-  if (fs.existsSync(hotReloadPath)) {
-    fs.unlinkSync(hotReloadPath);
-  }
-
-  const manifestPath = path.join(__dirname, 'out', 'manifest.json');
-  if (fs.existsSync(manifestPath)) {
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    if (manifest.background && manifest.background.service_worker === 'hot-reload.js') {
-      delete manifest.background;
-      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-    }
-  }
-} else {
+console.log("\n3. Writing timestamp for dev hot-reload (no-op in production)...");
+// The new background.js is always shipped — it routes content<->popup messages.
+// In dev builds we additionally write timestamp.json so background.js can poll
+// for it and reload the extension when the build is regenerated.
+if (process.env.NODE_ENV !== 'production') {
   fs.writeFileSync(path.join(__dirname, 'out', 'timestamp.json'), JSON.stringify({ timestamp: Date.now() }));
 }
 

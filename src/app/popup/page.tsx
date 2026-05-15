@@ -1,5 +1,5 @@
-import ClientPage from "../ClientPage";
+import Popup from "./Popup";
 
 export default function PopupPage() {
-  return <ClientPage />;
+  return <Popup />;
 }

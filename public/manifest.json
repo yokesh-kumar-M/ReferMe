@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ReferMe Agent",
-  "version": "1.0.1",
-  "description": "Personal AI Agent to detect job applications, extract context, and generate personalized referrals.",
+  "version": "2.0.0",
+  "description": "AI copilot for job applications — autofill, ATS match scoring, tailored resumes, and outreach drafting.",
   "action": {
     "default_popup": "popup/index.html",
     "default_title": "Open ReferMe Agent",
@@ -24,7 +24,7 @@
     "management"
   ],
   "background": {
-    "service_worker": "hot-reload.js"
+    "service_worker": "background.js"
   },
   "host_permissions": [
     "*://*/*"

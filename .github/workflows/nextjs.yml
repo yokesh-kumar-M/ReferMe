@@ -35,25 +35,3 @@ jobs:
         env:
           # No BUILD_STATIC — this validates the Vercel/SSR build path
           NODE_ENV: production
-
-  build-backend:
-    name: Backend Lint & Build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install backend dependencies
-        run: npm install
-
-      - name: Check backend starts
-        run: node -e "require('./index.js'); process.exit(0);" || true

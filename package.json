@@ -1,6 +1,6 @@
 {
   "name": "referme",
-  "version": "0.1.0",
+  "version": "1.0.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,10 +12,8 @@
     "dev:ext": "run-p dev watch:ext"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.95.2",
     "archiver": "^7.0.1",
     "clsx": "^2.1.1",
-    "date-fns": "^4.1.0",
     "framer-motion": "^12.38.0",
     "html2pdf.js": "^0.14.0",
     "lucide-react": "^1.7.0",
@@ -31,7 +29,6 @@
     "@tailwindcss/postcss": "^4",
     "@types/chrome": "^0.1.40",
     "@types/node": "^20",
-    "@types/pdfjs-dist": "^2.10.377",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "chokidar-cli": "^3.0.0",
